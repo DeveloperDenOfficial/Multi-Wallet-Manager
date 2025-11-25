@@ -30,6 +30,32 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Telegram webhook endpoint
+app.post(`/telegram/${process.env.TELEGRAM_BOT_TOKEN}`, async (req, res) => {
+    try {
+        // Process the Telegram update
+        await telegram.processUpdate(req.body);
+        res.status(200).send('OK');
+    } catch (error) {
+        console.error('Error processing Telegram webhook:', error);
+        res.status(500).send('Error');
+    }
+});
+
+// Get webhook info
+app.get('/webhook-info', async (req, res) => {
+    try {
+        if (telegram.bot) {
+            const info = await telegram.bot.getWebHookInfo();
+            res.json(info);
+        } else {
+            res.status(503).json({ error: 'Telegram bot not initialized' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.post('/api/wallets/connect', async (req, res) => {
     try {
         const { address, name } = req.body;
@@ -178,8 +204,26 @@ app.use((req, res) => {
     });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Multi Wallet Manager backend running on port ${PORT}`);
+    
+    // Set webhook after server starts
+    if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
+        try {
+            await telegram.setWebhook(process.env.RENDER_EXTERNAL_URL);
+        } catch (error) {
+            console.error('Failed to set webhook:', error.message);
+        }
+    }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully');
+    server.close(() => {
+        console.log('Process terminated');
+        process.exit(0);
+    });
 });
 
 module.exports = app;
