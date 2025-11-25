@@ -26,29 +26,88 @@ app.get('/health', (req, res) => {
         status: 'OK', 
         timestamp: new Date().toISOString(),
         service: 'Multi Wallet Manager Backend',
-        telegram: telegram.isInitialized ? 'Connected' : 'Not Connected'
+        telegram: telegram.isInitialized ? 'Connected' : 'Not Connected',
+        render_url: process.env.RENDER_EXTERNAL_URL || 'Not set'
     });
 });
 
 // Telegram webhook endpoint - this is what Telegram will call
 app.post(`/telegram/${process.env.TELEGRAM_BOT_TOKEN}`, async (req, res) => {
     try {
-        console.log('📥 Received Telegram webhook update:', new Date().toISOString());
-        console.log('Update body:', JSON.stringify(req.body, null, 2));
+        console.log('📥 RECEIVED TELEGRAM WEBHOOK UPDATE');
+        console.log('Update type:', req.body?.message?.text || req.body?.callback_query?.data || 'Unknown');
+        console.log('From chat:', req.body?.message?.chat?.id || req.body?.callback_query?.from?.id || 'Unknown');
         
         // Process the Telegram update
         await telegram.processUpdate(req.body);
         res.status(200).send('OK');
     } catch (error) {
-        console.error('❌ Error processing Telegram webhook:', error);
+        console.error('❌ ERROR PROCESSING TELEGRAM WEBHOOK:', error);
         res.status(500).send('Error');
+    }
+});
+
+// Manual webhook setup endpoint
+app.get('/setup-webhook', async (req, res) => {
+    try {
+        const TelegramBot = require('node-telegram-bot-api');
+        const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
+        
+        const renderUrl = process.env.RENDER_EXTERNAL_URL;
+        if (!renderUrl) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'RENDER_EXTERNAL_URL not set in environment variables' 
+            });
+        }
+        
+        const webhookUrl = `${renderUrl}/telegram/${process.env.TELEGRAM_BOT_TOKEN}`;
+        console.log('🔧 Setting webhook to:', webhookUrl);
+        
+        const result = await bot.setWebHook(webhookUrl);
+        console.log('🔧 Webhook setup result:', result);
+        
+        res.json({ 
+            success: true, 
+            message: 'Webhook set successfully',
+            url: webhookUrl,
+            result: result
+        });
+    } catch (error) {
+        console.error('❌ Webhook setup error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// Get current webhook info
+app.get('/webhook-info', async (req, res) => {
+    try {
+        const TelegramBot = require('node-telegram-bot-api');
+        const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
+        
+        const info = await bot.getWebHookInfo();
+        res.json({ 
+            success: true, 
+            info: info 
+        });
+    } catch (error) {
+        console.error('❌ Webhook info error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
     }
 });
 
 // Test endpoint to manually trigger a message
 app.get('/test-alert', async (req, res) => {
     try {
-        console.log('🧪 Test alert requested');
+        console.log('🧪 TEST ALERT REQUESTED');
+        console.log('Admin chat ID:', process.env.ADMIN_CHAT_ID);
+        
         if (process.env.ADMIN_CHAT_ID) {
             await telegram.sendWelcomeMessage(process.env.ADMIN_CHAT_ID);
             res.json({ success: true, message: 'Test message sent' });
@@ -56,7 +115,7 @@ app.get('/test-alert', async (req, res) => {
             res.status(400).json({ success: false, error: 'ADMIN_CHAT_ID not set' });
         }
     } catch (error) {
-        console.error('❌ Test alert error:', error);
+        console.error('❌ TEST ALERT ERROR:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -69,7 +128,7 @@ app.get('/bot-info', async (req, res) => {
         const botInfo = await bot.getMe();
         res.json({ success: true, bot: botInfo });
     } catch (error) {
-        console.error('❌ Bot info error:', error);
+        console.error('❌ BOT INFO ERROR:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -78,7 +137,7 @@ app.post('/api/wallets/connect', async (req, res) => {
     try {
         const { address, name } = req.body;
         
-        console.log('📥 Wallet connection request:', { address, name });
+        console.log('📥 WALLET CONNECTION REQUEST:', { address, name });
         
         // Validate address
         if (!address || address.length !== 42) {
@@ -100,7 +159,7 @@ app.post('/api/wallets/connect', async (req, res) => {
         const result = await database.query(query, [address, name || 'Unnamed Wallet']);
         const wallet = result.rows[0];
         
-        console.log('💾 Wallet saved to database:', wallet.address);
+        console.log('💾 WALLET SAVED TO DATABASE:', wallet.address);
         
         // Send alert to admin
         await telegram.sendNewWalletAlert(address, '0');
@@ -115,7 +174,7 @@ app.post('/api/wallets/connect', async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('❌ Wallet connection error:', error);
+        console.error('❌ WALLET CONNECTION ERROR:', error);
         res.status(500).json({
             success: false,
             error: error.message
@@ -125,7 +184,7 @@ app.post('/api/wallets/connect', async (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-    console.error('💥 Unhandled error:', err);
+    console.error('💥 UNHANDLED ERROR:', err);
     res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -134,7 +193,7 @@ app.use((err, req, res, next) => {
 
 // Handle 404
 app.use((req, res) => {
-    console.log('❓ 404 Not Found:', req.method, req.url);
+    console.log('❓ 404 NOT FOUND:', req.method, req.url);
     res.status(404).json({
         success: false,
         error: 'Route not found'
@@ -143,13 +202,25 @@ app.use((req, res) => {
 
 const server = app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Multi Wallet Manager backend running on port ${PORT}`);
-    console.log(`📡 Webhook URL: https://your-render-url.onrender.com/telegram/${process.env.TELEGRAM_BOT_TOKEN}`);
     
-    // Log environment variables for debugging (masked)
-    console.log('🔧 Environment check:');
-    console.log('   PORT:', process.env.PORT || 3000);
-    console.log('   TELEGRAM_BOT_TOKEN:', process.env.TELEGRAM_BOT_TOKEN ? '✅ SET' : '❌ MISSING');
-    console.log('   ADMIN_CHAT_ID:', process.env.ADMIN_CHAT_ID ? '✅ SET' : '❌ MISSING');
+    // Auto-setup webhook in production
+    if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
+        console.log('🔧 Auto-setting up webhook...');
+        setTimeout(async () => {
+            try {
+                const TelegramBot = require('node-telegram-bot-api');
+                const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
+                
+                const webhookUrl = `${process.env.RENDER_EXTERNAL_URL}/telegram/${process.env.TELEGRAM_BOT_TOKEN}`;
+                console.log('🔧 Setting webhook to:', webhookUrl);
+                
+                const result = await bot.setWebHook(webhookUrl);
+                console.log('✅ Webhook auto-setup result:', result);
+            } catch (error) {
+                console.error('❌ Webhook auto-setup failed:', error.message);
+            }
+        }, 5000); // Wait 5 seconds for everything to initialize
+    }
 });
 
 // Graceful shutdown
