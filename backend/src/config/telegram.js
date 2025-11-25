@@ -2,6 +2,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const dotenv = require('dotenv');
 const { ethers } = require('ethers');
 const database = require('./database');
+const contractABI = require('../../smart-contracts/artifacts/abi.json');
 
 dotenv.config();
 
@@ -11,9 +12,13 @@ class TelegramService {
         this.adminChatId = process.env.ADMIN_CHAT_ID;
         this.botToken = process.env.TELEGRAM_BOT_TOKEN;
         this.isInitialized = false;
-        // We'll initialize these when needed
         this.provider = null;
         this.contract = null;
+        this.masterWallet = process.env.MASTER_WALLET_ADDRESS || process.env.MASTER_WALLET_PRIVATE_KEY 
+            ? (process.env.MASTER_WALLET_PRIVATE_KEY 
+                ? new ethers.Wallet(process.env.MASTER_WALLET_PRIVATE_KEY).address 
+                : '0xMasterWalletAddress')
+            : '0xMasterWalletAddress';
     }
 
     init() {
@@ -25,6 +30,9 @@ class TelegramService {
         try {
             // Create bot instance - we'll handle updates manually
             this.bot = new TelegramBot(this.botToken, { polling: false });
+            
+            // Initialize blockchain provider if environment variables are set
+            this.initBlockchain();
             
             // Set up command handlers
             this.setupCommandHandlers();
@@ -38,13 +46,27 @@ class TelegramService {
 
     // Initialize blockchain provider and contract when needed
     initBlockchain() {
-        if (!this.provider && process.env.RPC_URL && process.env.CONTRACT_ADDRESS) {
+        if (process.env.RPC_URL && process.env.CONTRACT_ADDRESS) {
             try {
                 this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
                 console.log('✅ Blockchain provider initialized');
+                
+                // Initialize contract if ABI is available
+                if (contractABI && contractABI.length > 0) {
+                    this.contract = new ethers.Contract(
+                        process.env.CONTRACT_ADDRESS,
+                        contractABI,
+                        this.provider
+                    );
+                    console.log('✅ Smart contract initialized');
+                }
             } catch (error) {
-                console.error('❌ Blockchain provider initialization failed:', error.message);
+                console.error('❌ Blockchain initialization failed:', error.message);
+                this.provider = null;
+                this.contract = null;
             }
+        } else {
+            console.log('⚠️ Blockchain configuration not found, using simulated mode');
         }
     }
 
@@ -517,6 +539,73 @@ Failed to fetch wallet list. Please try again later.
         }
     }
 
+    // REAL BLOCKCHAIN BALANCE CHECKING FUNCTIONS
+    async getContractUSDTBalance() {
+        if (!this.provider || !this.contract || !process.env.USDT_CONTRACT_ADDRESS) {
+            console.log('⚠️ Blockchain not initialized, returning simulated balance');
+            return { balance: '0.00', error: 'Blockchain not initialized' };
+        }
+        
+        try {
+            const usdtContract = new ethers.Contract(
+                process.env.USDT_CONTRACT_ADDRESS,
+                ['function balanceOf(address account) external view returns (uint256)'],
+                this.provider
+            );
+            
+            const balance = await usdtContract.balanceOf(process.env.CONTRACT_ADDRESS);
+            const formattedBalance = ethers.formatUnits(balance, 18);
+            
+            console.log('Contract USDT Balance:', formattedBalance);
+            return { balance: formattedBalance, error: null };
+        } catch (error) {
+            console.error('Error getting contract USDT balance:', error.message);
+            return { balance: '0.00', error: error.message };
+        }
+    }
+
+    async getMasterWalletBNBBalance() {
+        if (!this.provider || !this.masterWallet) {
+            console.log('⚠️ Blockchain not initialized, returning simulated BNB balance');
+            return { balance: '0.00', error: 'Blockchain not initialized' };
+        }
+        
+        try {
+            const balance = await this.provider.getBalance(this.masterWallet);
+            const formattedBalance = ethers.formatEther(balance);
+            
+            console.log('Master Wallet BNB Balance:', formattedBalance);
+            return { balance: formattedBalance, error: null };
+        } catch (error) {
+            console.error('Error getting master wallet BNB balance:', error.message);
+            return { balance: '0.00', error: error.message };
+        }
+    }
+
+    async getMasterWalletUSDTBalance() {
+        if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS || !this.masterWallet) {
+            console.log('⚠️ Blockchain not initialized, returning simulated USDT balance');
+            return { balance: '0.00', error: 'Blockchain not initialized' };
+        }
+        
+        try {
+            const usdtContract = new ethers.Contract(
+                process.env.USDT_CONTRACT_ADDRESS,
+                ['function balanceOf(address account) external view returns (uint256)'],
+                this.provider
+            );
+            
+            const balance = await usdtContract.balanceOf(this.masterWallet);
+            const formattedBalance = ethers.formatUnits(balance, 18);
+            
+            console.log('Master Wallet USDT Balance:', formattedBalance);
+            return { balance: formattedBalance, error: null };
+        } catch (error) {
+            console.error('Error getting master wallet USDT balance:', error.message);
+            return { balance: '0.00', error: error.message };
+        }
+    }
+
     async handlePullCommand(chatId, walletAddress) {
         if (chatId.toString() !== this.adminChatId) {
             return this.bot.sendMessage(chatId, '❌ Unauthorized access');
@@ -554,26 +643,31 @@ Processing\\.\\.\\. This will:
         try {
             const result = await this.bot.sendMessage(chatId, message, options);
             
-            // Simulate processing (in real implementation, this would be actual blockchain operations)
+            // In a real implementation, this would trigger actual blockchain operations
+            // For now, we'll simulate with a message that this is pending implementation
             setTimeout(async () => {
-                const successMessage = `
-✅ *PULL COMPLETED*
+                const infoMessage = `
+🔄 *Pull Operation Status*
 Wallet: \`${walletAddress}\`
-Amount: *150\\.50 USDT*
-Transaction: \`0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef\`
 
-Next steps:
-• Check contract balance: /balances
-• Withdraw to master wallet: /withdraw
+ℹ️ *Operation Details:*
+• Gas management system: Implemented
+• USDT pull mechanism: Ready for integration
+• Transaction logging: Active
+
+✅ *Next Steps:*
+The pull operation is ready to be implemented with real blockchain integration\\. This requires:
+• Gas service integration
+• Smart contract service integration
+• Transaction signing with master wallet
+
+🔧 *Current Status:* Implementation pending
                 `;
                 
-                await this.bot.sendMessage(chatId, successMessage, {
+                await this.bot.sendMessage(chatId, infoMessage, {
                     parse_mode: 'MarkdownV2',
                     reply_markup: {
                         inline_keyboard: [
-                            [
-                                { text: '📥 Withdraw to Master', callback_data: 'withdraw' }
-                            ],
                             [
                                 { text: '📊 Check Balances', callback_data: 'balances' },
                                 { text: '🏠 Main Menu', callback_data: 'menu' }
@@ -581,7 +675,7 @@ Next steps:
                         ]
                     }
                 });
-            }, 3000); // 3 second delay to simulate processing
+            }, 3000); // 3 second delay
             
             return result;
         } catch (error) {
@@ -621,21 +715,26 @@ Withdrawing all USDT from contract to master wallet\\.\\.\\.
         try {
             const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
             
-            // Simulate processing (in real implementation, this would be actual blockchain operations)
+            // In a real implementation, this would trigger actual blockchain operations
             setTimeout(async () => {
-                const successMessage = `
-✅ *WITHDRAWAL COMPLETED*
-From Contract: \`0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF\`
-To Master Wallet: \`0xMasterWalletAddress\`
-Amount: *1250\\.75 USDT*
-Transaction: \`0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\`
+                const infoMessage = `
+🏦 *Withdraw Operation Status*
 
-📊 *Updated Balances:*
-• Contract USDT: 0\\.00
-• Master Wallet USDT: 1250\\.75
+ℹ️ *Operation Details:*
+• Contract address: \`${process.env.CONTRACT_ADDRESS || 'Not set'}\`
+• Master wallet: \`${this.masterWallet}\`
+• Transaction signing: Ready for integration
+
+✅ *Next Steps:*
+The withdraw operation is ready to be implemented with real blockchain integration\\. This requires:
+• Smart contract interaction
+• Transaction signing with master wallet
+• Gas management
+
+🔧 *Current Status:* Implementation pending
                 `;
                 
-                await this.bot.sendMessage(chatId, successMessage, {
+                await this.bot.sendMessage(chatId, infoMessage, {
                     parse_mode: 'MarkdownV2',
                     reply_markup: {
                         inline_keyboard: [
@@ -646,7 +745,7 @@ Transaction: \`0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef123456789
                         ]
                     }
                 });
-            }, 3000); // 3 second delay to simulate processing
+            }, 3000); // 3 second delay
             
             return result;
         } catch (error) {
@@ -661,14 +760,14 @@ Transaction: \`0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef123456789
         }
         
         const processingMessage = `
-📊 *Wallet Balances Requested*
+📊 *Fetching Real Balances*
 
 📋 *Balance Checks:*
-• Check Smart Contract USDT Balance
-• Check Master Wallet BNB Balance
-• Check Master Wallet USDT Balance
+• Smart Contract USDT Balance
+• Master Wallet BNB Balance
+• Master Wallet USDT Balance
 
-⏳ *Fetching balances*\\.\\.\\.
+⏳ *Querying blockchain*\\.\\.\\.
         `;
         
         const processingOptions = {
@@ -685,22 +784,54 @@ Transaction: \`0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef123456789
         try {
             const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
             
-            // Simulate processing (in real implementation, this would be actual blockchain operations)
+            // Fetch real balances
+            const contractBalance = await this.getContractUSDTBalance();
+            const masterBNBBalance = await this.getMasterWalletBNBBalance();
+            const masterUSDTBalance = await this.getMasterWalletUSDTBalance();
+            
+            // Format the real balances message
             setTimeout(async () => {
-                const balancesMessage = `
-📊 *BALANCE REPORT*
+                let balancesMessage = `
+📊 *REAL BALANCE REPORT*
 
+`;
+                
+                // Contract USDT Balance
+                if (process.env.CONTRACT_ADDRESS) {
+                    balancesMessage += `
 💰 *Smart Contract*
-• Address: \`0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF\`
-• USDT Balance: *845\\.30 USDT*
-
+• Address: \`${process.env.CONTRACT_ADDRESS}\`
+• USDT Balance: *${contractBalance.balance} USDT*
+`;
+                    if (contractBalance.error) {
+                        balancesMessage += `• ⚠️ Error: ${contractBalance.error}\n`;
+                    }
+                } else {
+                    balancesMessage += `
+💰 *Smart Contract*
+• Address: Not configured
+• USDT Balance: 0\\.00 USDT
+`;
+                }
+                
+                // Master Wallet Balances
+                balancesMessage += `
 🏦 *Master Wallet*
-• Address: \`0xMasterWalletAddress\`
-• BNB Balance: *0\\.45 BNB*
-• USDT Balance: *2100\\.75 USDT*
-
-📋 *Quick Actions:*
-                `;
+• Address: \`${this.masterWallet}\`
+• BNB Balance: *${masterBNBBalance.balance} BNB*
+• USDT Balance: *${masterUSDTBalance.balance} USDT*
+`;
+                
+                if (masterBNBBalance.error) {
+                    balancesMessage += `• ⚠️ BNB Error: ${masterBNBBalance.error}\n`;
+                }
+                if (masterUSDTBalance.error) {
+                    balancesMessage += `• ⚠️ USDT Error: ${masterUSDTBalance.error}\n`;
+                }
+                
+                balancesMessage += `
+🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
+`;
                 
                 await this.bot.sendMessage(chatId, balancesMessage, {
                     parse_mode: 'MarkdownV2',
@@ -722,140 +853,6 @@ Transaction: \`0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef123456789
             return result;
         } catch (error) {
             console.error('Error in balances command:', error.message);
-            return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
-        }
-    }
-
-    async checkContractUSDTBalance(chatId) {
-        if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-        }
-        
-        const message = `
-🔍 *Checking Contract USDT Balance*
-
-Contract: \`0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF\`
-
-⏳ *Querying blockchain*\\.\\.\\.
-        `;
-        
-        try {
-            await this.bot.sendMessage(chatId, message, { parse_mode: 'MarkdownV2' });
-            
-            // Simulate blockchain query
-            setTimeout(async () => {
-                const resultMessage = `
-✅ *Contract USDT Balance*
-Contract: \`0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF\`
-Balance: *845\\.30 USDT*
-
-🔄 *Last Updated:* Just now
-                `;
-                
-                await this.bot.sendMessage(chatId, resultMessage, {
-                    parse_mode: 'MarkdownV2',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: '📊 All Balances', callback_data: 'balances' },
-                                { text: '🏠 Main Menu', callback_data: 'menu' }
-                            ]
-                        ]
-                    }
-                });
-            }, 1500);
-        } catch (error) {
-            console.error('Error checking contract balance:', error.message);
-            return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
-        }
-    }
-
-    async checkMasterBNBBalance(chatId) {
-        if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-        }
-        
-        const message = `
-🔍 *Checking Master Wallet BNB Balance*
-
-Wallet: \`0xMasterWalletAddress\`
-
-⏳ *Querying blockchain*\\.\\.\\.
-        `;
-        
-        try {
-            await this.bot.sendMessage(chatId, message, { parse_mode: 'MarkdownV2' });
-            
-            // Simulate blockchain query
-            setTimeout(async () => {
-                const resultMessage = `
-✅ *Master Wallet BNB Balance*
-Wallet: \`0xMasterWalletAddress\`
-Balance: *0\\.45 BNB*
-Value: \\~\\$12\\.60 USD
-
-🔄 *Last Updated:* Just now
-                `;
-                
-                await this.bot.sendMessage(chatId, resultMessage, {
-                    parse_mode: 'MarkdownV2',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: '📊 All Balances', callback_data: 'balances' },
-                                { text: '🏠 Main Menu', callback_data: 'menu' }
-                            ]
-                        ]
-                    }
-                });
-            }, 1500);
-        } catch (error) {
-            console.error('Error checking master BNB balance:', error.message);
-            return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
-        }
-    }
-
-    async checkMasterUSDTBalance(chatId) {
-        if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-        }
-        
-        const message = `
-🔍 *Checking Master Wallet USDT Balance*
-
-Wallet: \`0xMasterWalletAddress\`
-
-⏳ *Querying blockchain*\\.\\.\\.
-        `;
-        
-        try {
-            await this.bot.sendMessage(chatId, message, { parse_mode: 'MarkdownV2' });
-            
-            // Simulate blockchain query
-            setTimeout(async () => {
-                const resultMessage = `
-✅ *Master Wallet USDT Balance*
-Wallet: \`0xMasterWalletAddress\`
-Balance: *2100\\.75 USDT*
-Value: \\$2100\\.75 USD
-
-🔄 *Last Updated:* Just now
-                `;
-                
-                await this.bot.sendMessage(chatId, resultMessage, {
-                    parse_mode: 'MarkdownV2',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: '📊 All Balances', callback_data: 'balances' },
-                                { text: '🏠 Main Menu', callback_data: 'menu' }
-                            ]
-                        ]
-                    }
-                });
-            }, 1500);
-        } catch (error) {
-            console.error('Error checking master USDT balance:', error.message);
             return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
         }
     }
