@@ -825,7 +825,6 @@ The withdraw operation is ready to be implemented with real blockchain integrati
         return this.bot.sendMessage(chatId, '❌ Unauthorized access');
     }
     
-    // Properly escape the processing message
     const processingMessage = `
 📊 *Fetching Real Balances*
 
@@ -851,34 +850,29 @@ The withdraw operation is ready to be implemented with real blockchain integrati
     try {
         await this.bot.sendMessage(chatId, processingMessage, processingOptions);
         
+        // Small delay to simulate processing
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
         // Fetch real balances
         const contractBalance = await this.getContractUSDTBalance();
         const masterBNBBalance = await this.getMasterWalletBNBBalance();
         const masterUSDTBalance = await this.getMasterWalletUSDTBalance();
         
-        // Format the real balances message with proper escaping
+        // Format the real balances message with proper MarkdownV2 escaping
         const contractAddr = process.env.CONTRACT_ADDRESS || 'Not set';
         const masterAddr = this.masterWallet;
-        const contractBal = contractBalance.balance;
-        const masterBNB = masterBNBBalance.balance;
-        const masterUSDT = masterUSDTBalance.balance;
+        const contractBal = contractBalance.balance || '0.00';
+        const masterBNB = masterBNBBalance.balance || '0.00';
+        const masterUSDT = masterUSDTBalance.balance || '0.00';
         const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-        
-        // Escape all values for MarkdownV2
-        const escapedContractAddr = this.escapeMarkdown(contractAddr);
-        const escapedMasterAddr = this.escapeMarkdown(masterAddr);
-        const escapedContractBal = this.escapeMarkdown(contractBal);
-        const escapedMasterBNB = this.escapeMarkdown(masterBNB);
-        const escapedMasterUSDT = this.escapeMarkdown(masterUSDT);
-        const escapedTimestamp = this.escapeMarkdown(timestamp);
         
         let balancesMessage = `📊 *REAL BALANCE REPORT*\\n\\n`;
         
         // Contract USDT Balance
         if (process.env.CONTRACT_ADDRESS) {
             balancesMessage += `💰 *Smart Contract*\\n`;
-            balancesMessage += `• Address: \`${escapedContractAddr}\`\\n`;
-            balancesMessage += `• USDT Balance: *${escapedContractBal} USDT*\\n`;
+            balancesMessage += `• Address: \`${this.escapeMarkdown(contractAddr)}\`\\n`;
+            balancesMessage += `• USDT Balance: *${this.escapeMarkdown(contractBal)} USDT*\\n`;
             if (contractBalance.error) {
                 balancesMessage += `• ⚠️ Error: ${this.escapeMarkdown(contractBalance.error)}\\n`;
             }
@@ -890,9 +884,9 @@ The withdraw operation is ready to be implemented with real blockchain integrati
         
         // Master Wallet Balances
         balancesMessage += `\\n🏦 *Master Wallet*\\n`;
-        balancesMessage += `• Address: \`${escapedMasterAddr}\`\\n`;
-        balancesMessage += `• BNB Balance: *${escapedMasterBNB} BNB*\\n`;
-        balancesMessage += `• USDT Balance: *${escapedMasterUSDT} USDT*\\n`;
+        balancesMessage += `• Address: \`${this.escapeMarkdown(masterAddr)}\`\\n`;
+        balancesMessage += `• BNB Balance: *${this.escapeMarkdown(masterBNB)} BNB*\\n`;
+        balancesMessage += `• USDT Balance: *${this.escapeMarkdown(masterUSDT)} USDT*\\n`;
         
         if (masterBNBBalance.error) {
             balancesMessage += `• ⚠️ BNB Error: ${this.escapeMarkdown(masterBNBBalance.error)}\\n`;
@@ -901,7 +895,7 @@ The withdraw operation is ready to be implemented with real blockchain integrati
             balancesMessage += `• ⚠️ USDT Error: ${this.escapeMarkdown(masterUSDTBalance.error)}\\n`;
         }
         
-        balancesMessage += `\\n🔄 *Last Updated:* ${escapedTimestamp} UTC\\n`;
+        balancesMessage += `\\n🔄 *Last Updated:* ${this.escapeMarkdown(timestamp)} UTC\\n`;
         
         await this.bot.sendMessage(chatId, balancesMessage, {
             parse_mode: 'MarkdownV2',
@@ -918,9 +912,11 @@ The withdraw operation is ready to be implemented with real blockchain integrati
                 ]
             }
         });
+        
     } catch (error) {
         console.error('Error in balances command:', error.message);
-        await this.bot.sendMessage(chatId, `❌ Error: ${this.escapeMarkdown(error.message)}`);
+        // Fallback to plain text if Markdown fails
+        await this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
     }
 }
     // Process webhook updates manually
@@ -937,6 +933,7 @@ The withdraw operation is ready to be implemented with real blockchain integrati
 }
 
 module.exports = new TelegramService();
+
 
 
 
