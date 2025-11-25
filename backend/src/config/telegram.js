@@ -624,11 +624,11 @@ Failed to fetch wallet list. Please try again later.
     }
 
     async getMasterWalletBNBBalance() {
-        if (!this.provider || !this.masterWallet) {*        console.log('⚠️ Blockchain not initialized, returning zero BNB balance');
-            return { balance: '0.00', error: 'Blockchain not initialized' };
-        }
-        
-        try {
+        if (!this.provider || !this.masterWallet) {
+    console.log('⚠️ Blockchain not initialized, returning zero BNB balance');
+    return { balance: '0.00', error: 'Blockchain not initialized' };
+}
+    try {
             const balance = await this.provider.getBalance(this.masterWallet);
             const formattedBalance = ethers.formatEther(balance);
             
@@ -941,5 +941,6 @@ The withdraw operation is ready to be implemented with real blockchain integrati
 }
 
 module.exports = new TelegramService();
+
 
 
