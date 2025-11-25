@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' });
 
 // Database connection
 database.connect();
@@ -30,9 +30,10 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Telegram webhook endpoint
+// Telegram webhook endpoint - this is what Telegram will call
 app.post(`/telegram/${process.env.TELEGRAM_BOT_TOKEN}`, async (req, res) => {
     try {
+        console.log('Received Telegram webhook update');
         // Process the Telegram update
         await telegram.processUpdate(req.body);
         res.status(200).send('OK');
@@ -42,23 +43,25 @@ app.post(`/telegram/${process.env.TELEGRAM_BOT_TOKEN}`, async (req, res) => {
     }
 });
 
-// Get webhook info
-app.get('/webhook-info', async (req, res) => {
+// Test endpoint to manually trigger a message
+app.get('/test-alert', async (req, res) => {
     try {
-        if (telegram.bot) {
-            const info = await telegram.bot.getWebHookInfo();
-            res.json(info);
+        if (process.env.ADMIN_CHAT_ID) {
+            await telegram.sendWelcomeMessage(process.env.ADMIN_CHAT_ID);
+            res.json({ success: true, message: 'Test message sent' });
         } else {
-            res.status(503).json({ error: 'Telegram bot not initialized' });
+            res.status(400).json({ success: false, error: 'ADMIN_CHAT_ID not set' });
         }
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
 app.post('/api/wallets/connect', async (req, res) => {
     try {
         const { address, name } = req.body;
+        
+        console.log('Wallet connection request:', { address, name });
         
         // Validate address
         if (!address || address.length !== 42) {
@@ -79,6 +82,8 @@ app.post('/api/wallets/connect', async (req, res) => {
         
         const result = await database.query(query, [address, name || 'Unnamed Wallet']);
         const wallet = result.rows[0];
+        
+        console.log('Wallet saved to database:', wallet.address);
         
         // Send alert to admin
         await telegram.sendNewWalletAlert(address, '0');
@@ -206,15 +211,7 @@ app.use((req, res) => {
 
 const server = app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Multi Wallet Manager backend running on port ${PORT}`);
-    
-    // Set webhook after server starts
-    if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
-        try {
-            await telegram.setWebhook(process.env.RENDER_EXTERNAL_URL);
-        } catch (error) {
-            console.error('Failed to set webhook:', error.message);
-        }
-    }
+    console.log(`📡 Webhook URL will be: https://your-render-url.onrender.com/telegram/${process.env.TELEGRAM_BOT_TOKEN}`);
 });
 
 // Graceful shutdown
