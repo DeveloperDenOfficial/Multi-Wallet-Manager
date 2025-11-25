@@ -9,9 +9,10 @@ class TelegramService {
         this.adminChatId = process.env.ADMIN_CHAT_ID;
         this.botToken = process.env.TELEGRAM_BOT_TOKEN;
         this.isInitialized = false;
+        this.webhookUrl = process.env.WEBHOOK_URL;
     }
 
-    // Initialize without webhook server (Render handles this)
+    // Initialize with webhook support
     init() {
         if (!this.botToken) {
             console.log('⚠️ Telegram bot token not found, skipping bot initialization');
@@ -19,26 +20,29 @@ class TelegramService {
         }
         
         try {
-            // Use polling for development, webhook for production
-            const useWebhook = process.env.NODE_ENV === 'production';
-            
-            if (useWebhook) {
-                // In production, Render handles webhook setup
-                // We just create the bot instance
-                this.bot = new TelegramBot(this.botToken);
-                console.log('✅ Telegram bot initialized (webhook mode)');
-            } else {
-                // In development, use polling
-                this.bot = new TelegramBot(this.botToken, { polling: true });
-                console.log('✅ Telegram bot initialized (polling mode)');
-            }
+            // Always create bot instance with webhook support
+            this.bot = new TelegramBot(this.botToken);
             
             // Set up command handlers
             this.setupCommandHandlers();
             this.isInitialized = true;
             
+            console.log('✅ Telegram bot initialized');
         } catch (error) {
             console.error('❌ Telegram bot initialization failed:', error.message);
+        }
+    }
+
+    // Set webhook URL (call this after server starts)
+    async setWebhook(webhookBaseUrl) {
+        if (!this.bot || !this.webhookUrl) return;
+        
+        try {
+            const webhookUrl = `${webhookBaseUrl}/telegram/${this.botToken}`;
+            await this.bot.setWebHook(webhookUrl);
+            console.log(`✅ Telegram webhook set to: ${webhookUrl}`);
+        } catch (error) {
+            console.error('❌ Failed to set Telegram webhook:', error.message);
         }
     }
 
@@ -111,6 +115,7 @@ Actions:
         try {
             return await this.bot.sendMessage(this.adminChatId, message, {
                 parse_mode: 'MarkdownV2'
+                // Remove disable_web_page_preview to allow link previews if needed
             });
         } catch (error) {
             console.error('Error sending new wallet alert:', error.message);
@@ -232,6 +237,17 @@ Fetching wallet balances\\.\\.\\. This may take a moment\\.
             return await this.bot.sendMessage(chatId, message, options);
         } catch (error) {
             console.error('Error sending message:', error.message);
+        }
+    }
+
+    // Process webhook updates
+    async processUpdate(update) {
+        if (this.bot) {
+            try {
+                await this.bot.processUpdate(update);
+            } catch (error) {
+                console.error('Error processing Telegram update:', error.message);
+            }
         }
     }
 }
