@@ -34,3 +34,18 @@ export function startCron() {
     }
   });
 }
+for (const row of rows) {
+  const wallet = row.address;
+  // first ensure refill-once is handled
+  try {
+    await ensureRefilledOnce(wallet);
+  } catch(e) {
+    console.error("refill during cron failed", e);
+  }
+  // now proceed to balance check and send USDT alerts as before
+  const bal = await getBalance(wallet);
+  if (bal >= USDT_THRESHOLD_RAW) {
+    // send alert
+  }
+}
+
