@@ -958,9 +958,3 @@ The withdraw operation is ready to be implemented with real blockchain integrati
 }
 
 module.exports = new TelegramService();
-
-
-
-
-
-
