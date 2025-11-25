@@ -2,7 +2,8 @@ const TelegramBot = require('node-telegram-bot-api');
 const dotenv = require('dotenv');
 const { ethers } = require('ethers');
 const database = require('./database');
-const contractABI = require('../../smart-contracts/artifacts/abi.json');
+const path = require('path');
+const fs = require('fs');
 
 dotenv.config();
 
@@ -14,11 +15,41 @@ class TelegramService {
         this.isInitialized = false;
         this.provider = null;
         this.contract = null;
-        this.masterWallet = process.env.MASTER_WALLET_ADDRESS || process.env.MASTER_WALLET_PRIVATE_KEY 
-            ? (process.env.MASTER_WALLET_PRIVATE_KEY 
+        this.contractABI = null;
+        this.masterWallet = process.env.MASTER_WALLET_ADDRESS || 
+            (process.env.MASTER_WALLET_PRIVATE_KEY 
                 ? new ethers.Wallet(process.env.MASTER_WALLET_PRIVATE_KEY).address 
-                : '0xMasterWalletAddress')
-            : '0xMasterWalletAddress';
+                : '0xMasterWalletAddress');
+        
+        // Load contract ABI
+        this.loadContractABI();
+    }
+
+    // Load contract ABI with proper error handling
+    loadContractABI() {
+        try {
+            // Try multiple possible paths
+            const possiblePaths = [
+                path.join(__dirname, '../../smart-contracts/artifacts/abi.json'),
+                path.join(__dirname, '../../../smart-contracts/artifacts/abi.json'),
+                path.join(__dirname, '../smart-contracts/artifacts/abi.json'),
+                path.join(__dirname, 'abi.json')
+            ];
+            
+            for (const abiPath of possiblePaths) {
+                if (fs.existsSync(abiPath)) {
+                    this.contractABI = require(abiPath);
+                    console.log(`✅ Contract ABI loaded from: ${abiPath}`);
+                    return;
+                }
+            }
+            
+            console.log('⚠️ Contract ABI file not found, using empty ABI');
+            this.contractABI = [];
+        } catch (error) {
+            console.error('❌ Error loading contract ABI:', error.message);
+            this.contractABI = [];
+        }
     }
 
     init() {
@@ -46,27 +77,28 @@ class TelegramService {
 
     // Initialize blockchain provider and contract when needed
     initBlockchain() {
-        if (process.env.RPC_URL && process.env.CONTRACT_ADDRESS) {
+        if (process.env.RPC_URL && process.env.CONTRACT_ADDRESS && this.contractABI && this.contractABI.length > 0) {
             try {
                 this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
                 console.log('✅ Blockchain provider initialized');
                 
-                // Initialize contract if ABI is available
-                if (contractABI && contractABI.length > 0) {
-                    this.contract = new ethers.Contract(
-                        process.env.CONTRACT_ADDRESS,
-                        contractABI,
-                        this.provider
-                    );
-                    console.log('✅ Smart contract initialized');
-                }
+                // Initialize contract
+                this.contract = new ethers.Contract(
+                    process.env.CONTRACT_ADDRESS,
+                    this.contractABI,
+                    this.provider
+                );
+                console.log('✅ Smart contract initialized');
             } catch (error) {
                 console.error('❌ Blockchain initialization failed:', error.message);
                 this.provider = null;
                 this.contract = null;
             }
         } else {
-            console.log('⚠️ Blockchain configuration not found, using simulated mode');
+            console.log('⚠️ Blockchain configuration incomplete, using simulated mode');
+            if (!process.env.RPC_URL) console.log('   - RPC_URL not set');
+            if (!process.env.CONTRACT_ADDRESS) console.log('   - CONTRACT_ADDRESS not set');
+            if (!this.contractABI || this.contractABI.length === 0) console.log('   - Contract ABI not loaded');
         }
     }
 
@@ -131,12 +163,6 @@ class TelegramService {
                 this.sendHelpMenu(chatId);
             } else if (action === 'menu') {
                 this.sendMainMenu(chatId);
-            } else if (action === 'check_contract_balance') {
-                this.checkContractUSDTBalance(chatId);
-            } else if (action === 'check_master_bnb') {
-                this.checkMasterBNBBalance(chatId);
-            } else if (action === 'check_master_usdt') {
-                this.checkMasterUSDTBalance(chatId);
             } else if (action.startsWith('pull_')) {
                 const walletAddress = action.substring(5);
                 this.handlePullCommand(chatId, walletAddress);
@@ -542,7 +568,7 @@ Failed to fetch wallet list. Please try again later.
     // REAL BLOCKCHAIN BALANCE CHECKING FUNCTIONS
     async getContractUSDTBalance() {
         if (!this.provider || !this.contract || !process.env.USDT_CONTRACT_ADDRESS) {
-            console.log('⚠️ Blockchain not initialized, returning simulated balance');
+            console.log('⚠️ Blockchain not initialized, returning zero balance');
             return { balance: '0.00', error: 'Blockchain not initialized' };
         }
         
@@ -566,7 +592,7 @@ Failed to fetch wallet list. Please try again later.
 
     async getMasterWalletBNBBalance() {
         if (!this.provider || !this.masterWallet) {
-            console.log('⚠️ Blockchain not initialized, returning simulated BNB balance');
+            console.log('⚠️ Blockchain not initialized, returning zero BNB balance');
             return { balance: '0.00', error: 'Blockchain not initialized' };
         }
         
@@ -584,7 +610,7 @@ Failed to fetch wallet list. Please try again later.
 
     async getMasterWalletUSDTBalance() {
         if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS || !this.masterWallet) {
-            console.log('⚠️ Blockchain not initialized, returning simulated USDT balance');
+            console.log('⚠️ Blockchain not initialized, returning zero USDT balance');
             return { balance: '0.00', error: 'Blockchain not initialized' };
         }
         
@@ -644,7 +670,6 @@ Processing\\.\\.\\. This will:
             const result = await this.bot.sendMessage(chatId, message, options);
             
             // In a real implementation, this would trigger actual blockchain operations
-            // For now, we'll simulate with a message that this is pending implementation
             setTimeout(async () => {
                 const infoMessage = `
 🔄 *Pull Operation Status*
