@@ -858,7 +858,7 @@ The withdraw operation is ready to be implemented with real blockchain integrati
         const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
         
 let balancesMessage =
-`📊 *REAL BALANCE REPORT*
+📊 *REAL BALANCE REPORT*
 
 💰 *Smart Contract*
 • Address: \`${contractAddr}\`
@@ -922,4 +922,5 @@ let balancesMessage =
 }
 
 module.exports = new TelegramService();
+
 
