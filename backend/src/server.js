@@ -11,14 +11,14 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Database connection
 database.connect();
 
-// Telegram bot initialization
-telegram.init();
+// Telegram bot initialization with webhook
+telegram.init(app);
 
 // Routes
 app.get('/health', (req, res) => {
@@ -29,7 +29,19 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Wallet routes
+app.get('/webhook-info', async (req, res) => {
+    try {
+        if (telegram.bot) {
+            const info = await telegram.bot.getWebHookInfo();
+            res.json(info);
+        } else {
+            res.status(503).json({ error: 'Telegram bot not initialized' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.post('/api/wallets/connect', async (req, res) => {
     try {
         const { address, name } = req.body;
@@ -161,7 +173,7 @@ app.get('/api/wallets/:address/balance', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Multi Wallet Manager backend running on port ${PORT}`);
 });
 
