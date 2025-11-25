@@ -1,0 +1,54 @@
+# render.yaml - Render service definitions (3 services)
+services:
+  - type: web
+    name: mwm-backend
+    env: docker
+    dockerfilePath: backend/Dockerfile
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    autoDeploy: true
+    buildCommand: ""
+    startCommand: "node index.js"
+    envVars:
+      - key: BSC_RPC
+        sync: false
+      - key: CONTRACT_ADDRESS
+        sync: false
+      - key: USDT_ADDRESS
+        sync: false
+      - key: ADMIN_PRIVATE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_ADMIN_ID
+        sync: false
+
+  - type: web
+    name: mwm-bot
+    env: docker
+    dockerfilePath: bot/Dockerfile
+    plan: starter
+    region: oregon
+    autoDeploy: true
+    startCommand: "node bot.js"
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_ADMIN_ID
+        sync: false
+      - key: BACKEND_URL
+        sync: false
+
+  - type: static
+    name: mwm-frontend
+    env: static
+    plan: free
+    region: oregon
+    buildCommand: "npm install && npm run build"
+    publishPath: "dist"
+    envVars:
+      - key: BACKEND_URL
+        sync: false

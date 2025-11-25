@@ -1,0 +1,11 @@
+{
+  "name": "mwm-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": { "start": "node bot.js" },
+  "dependencies": {
+    "axios": "^1.6.7",
+    "dotenv": "^16.3.1",
+    "node-telegram-bot-api": "^0.61.0"
+  }
+}
