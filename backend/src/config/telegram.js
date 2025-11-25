@@ -857,7 +857,7 @@ The withdraw operation is ready to be implemented with real blockchain integrati
         const masterUSDT = masterUSDTBalance.balance || '0.00';
         const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
         
-let balancesMessage =
+let balancesMessage = `
 📊 *REAL BALANCE REPORT*
 
 💰 *Smart Contract*
@@ -872,19 +872,6 @@ let balancesMessage =
 🔄 *Last Updated:* ${timestamp} UTC
 `;
 
-📊 REAL BALANCE REPORT
-
-💰 Smart Contract
-• Address: ${process.env.CONTRACT_ADDRESS || 'Not set'}
-• USDT Balance: ${(contractBalance?.balance || '0.00')} USDT
-
-🏦 Master Wallet
-• Address: ${this.masterWallet}
-• BNB Balance: ${(masterBNBBalance?.balance || '0.00')} BNB
-• USDT Balance: ${(masterUSDTBalance?.balance || '0.00')} USDT
-
-🔄 Last Updated: ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
-        `;
         await this.bot.sendMessage(chatId, fallbackMessage, {
             reply_markup: {
                 inline_keyboard: [
@@ -922,5 +909,6 @@ let balancesMessage =
 }
 
 module.exports = new TelegramService();
+
 
 
