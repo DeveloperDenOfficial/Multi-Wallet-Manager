@@ -1,6 +1,6 @@
 const { ethers } = require('ethers');
 const env = require('../config/environment');
-const contractABI = require('../../smart-contracts/artifacts/abi.json');
+const contractABI = require('../../../smart-contracts/artifacts/abi.json');
 
 class ContractService {
     constructor() {
@@ -107,3 +107,4 @@ class ContractService {
 }
 
 module.exports = new ContractService();
+
