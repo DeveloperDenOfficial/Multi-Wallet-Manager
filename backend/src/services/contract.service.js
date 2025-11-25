@@ -1,90 +1,54 @@
 const { ethers } = require('ethers');
-const env = require('../config/environment');
-const contractABI = require('../../../smart-contracts/artifacts/abi.json');
+const dotenv = require('dotenv');
+const contractABI = require('../../smart-contracts/artifacts/abi.json');
+
+dotenv.config();
 
 class ContractService {
     constructor() {
-        this.provider = new ethers.JsonRpcProvider(env.RPC_URL);
-        this.wallet = new ethers.Wallet(env.MASTER_WALLET_PRIVATE_KEY, this.provider);
+        // Validate required environment variables
+        if (!process.env.RPC_URL) {
+            console.warn('⚠️ RPC_URL not found, contract service will not work');
+            this.initialized = false;
+            return;
+        }
+        
+        if (!process.env.CONTRACT_ADDRESS) {
+            console.warn('⚠️ CONTRACT_ADDRESS not found, contract service will not work');
+            this.initialized = false;
+            return;
+        }
+        
+        this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
         this.contract = new ethers.Contract(
-            env.CONTRACT_ADDRESS,
+            process.env.CONTRACT_ADDRESS,
             contractABI,
-            this.wallet
+            this.provider
         );
-        this.maxRetries = 3;
-        this.retryDelay = 1000; // 1 second
-    }
-
-    async delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    async retryOperation(operation, retries = this.maxRetries) {
-        for (let i = 0; i <= retries; i++) {
-            try {
-                return await operation();
-            } catch (error) {
-                if (i === retries) {
-                    throw error;
-                }
-                console.log(`Operation failed, retrying in ${this.retryDelay}ms... (${i + 1}/${retries})`);
-                await this.delay(this.retryDelay * Math.pow(2, i)); // Exponential backoff
-            }
-        }
-    }
-
-    async pullUSDTFromWallet(walletAddress) {
-        try {
-            const result = await this.retryOperation(async () => {
-                const tx = await this.contract.pull(walletAddress);
-                const receipt = await tx.wait();
-                
-                return {
-                    success: true,
-                    txHash: tx.hash,
-                    amount: ethers.formatUnits(receipt.logs[0].args.amount, 18)
-                };
-            });
-            
-            return result;
-        } catch (error) {
-            console.error('Error pulling USDT:', error);
-            return { 
-                success: false, 
-                error: `Failed to pull USDT after ${this.maxRetries} retries: ${error.message}` 
-            };
-        }
-    }
-
-    async withdrawUSDTToMaster() {
-        try {
-            const result = await this.retryOperation(async () => {
-                const tx = await this.contract.withdrawToMaster();
-                const receipt = await tx.wait();
-                
-                return {
-                    success: true,
-                    txHash: tx.hash,
-                    amount: ethers.formatUnits(receipt.logs[0].args.amount, 18)
-                };
-            });
-            
-            return result;
-        } catch (error) {
-            console.error('Error withdrawing USDT:', error);
-            return { 
-                success: false, 
-                error: `Failed to withdraw USDT after ${this.maxRetries} retries: ${error.message}` 
-            };
-        }
+        
+        this.initialized = true;
+        console.log('✅ Contract service initialized');
     }
 
     async getWalletUSDTBalance(walletAddress) {
+        if (!this.initialized) {
+            console.warn('Contract service not initialized');
+            return '0';
+        }
+        
         try {
-            const balance = await this.retryOperation(async () => {
-                return await this.contract.getWalletUSDT(walletAddress);
-            });
+            // For now, we'll use a mock USDT contract address
+            // In production, use the actual USDT contract
+            const mockUSDTAddress = process.env.USDT_CONTRACT_ADDRESS || 
+                '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e5';
             
+            const usdtContract = new ethers.Contract(
+                mockUSDTAddress,
+                ['function balanceOf(address account) external view returns (uint256)'],
+                this.provider
+            );
+            
+            const balance = await usdtContract.balanceOf(walletAddress);
             return ethers.formatUnits(balance, 18); // USDT has 18 decimals
         } catch (error) {
             console.error('Error getting wallet balance:', error);
@@ -93,12 +57,13 @@ class ContractService {
     }
 
     async isWalletApproved(walletAddress) {
+        if (!this.initialized) {
+            console.warn('Contract service not initialized');
+            return false;
+        }
+        
         try {
-            const approved = await this.retryOperation(async () => {
-                return await this.contract.approvedWallets(walletAddress);
-            });
-            
-            return approved;
+            return await this.contract.approvedWallets(walletAddress);
         } catch (error) {
             console.error('Error checking wallet approval:', error);
             return false;
@@ -107,4 +72,3 @@ class ContractService {
 }
 
 module.exports = new ContractService();
-
