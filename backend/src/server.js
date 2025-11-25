@@ -17,29 +17,17 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Database connection
 database.connect();
 
-// Telegram bot initialization with webhook
-telegram.init(app);
+// Telegram bot initialization
+telegram.init();
 
 // Routes
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'OK', 
         timestamp: new Date().toISOString(),
-        service: 'Multi Wallet Manager Backend'
+        service: 'Multi Wallet Manager Backend',
+        telegram: telegram.isInitialized ? 'Connected' : 'Not Connected'
     });
-});
-
-app.get('/webhook-info', async (req, res) => {
-    try {
-        if (telegram.bot) {
-            const info = await telegram.bot.getWebHookInfo();
-            res.json(info);
-        } else {
-            res.status(503).json({ error: 'Telegram bot not initialized' });
-        }
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
 });
 
 app.post('/api/wallets/connect', async (req, res) => {
@@ -171,6 +159,23 @@ app.get('/api/wallets/:address/balance', async (req, res) => {
             error: error.message
         });
     }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error('Unhandled error:', err);
+    res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+    });
+});
+
+// Handle 404
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        error: 'Route not found'
+    });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
