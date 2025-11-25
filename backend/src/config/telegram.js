@@ -857,57 +857,21 @@ The withdraw operation is ready to be implemented with real blockchain integrati
         const masterUSDT = masterUSDTBalance.balance || '0.00';
         const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
         
-        let balancesMessage = "📊 *REAL BALANCE REPORT*\\n\\n";
-        
-        // Contract USDT Balance
-        if (process.env.CONTRACT_ADDRESS) {
-            balancesMessage += "💰 *Smart Contract*\\n";
-            balancesMessage += "• Address: `" + this.escapeMarkdown(contractAddr) + "`\\n";
-            balancesMessage += "• USDT Balance: *" + this.escapeMarkdown(contractBal) + " USDT*\\n";
-            if (contractBalance.error) {
-                balancesMessage += "• ⚠️ Error: " + this.escapeMarkdown(contractBalance.error) + "\\n";
-            }
-        } else {
-            balancesMessage += "💰 *Smart Contract*\\n";
-            balancesMessage += "• Address: Not configured\\n";
-            balancesMessage += "• USDT Balance: 0\\.00 USDT\\n";
-        }
-        
-        // Master Wallet Balances
-        balancesMessage += "\\n🏦 *Master Wallet*\\n";
-        balancesMessage += "• Address: `" + this.escapeMarkdown(masterAddr) + "`\\n";
-        balancesMessage += "• BNB Balance: *" + this.escapeMarkdown(masterBNB) + " BNB*\\n";
-        balancesMessage += "• USDT Balance: *" + this.escapeMarkdown(masterUSDT) + " USDT*\\n";
-        
-        if (masterBNBBalance.error) {
-            balancesMessage += "• ⚠️ BNB Error: " + this.escapeMarkdown(masterBNBBalance.error) + "\\n";
-        }
-        if (masterUSDTBalance.error) {
-            balancesMessage += "• ⚠️ USDT Error: " + this.escapeMarkdown(masterUSDTBalance.error) + "\\n";
-        }
-        
-        balancesMessage += "\\n🔄 *Last Updated:* " + this.escapeMarkdown(timestamp) + " UTC\\n";
-        
-        await this.bot.sendMessage(chatId, balancesMessage, {
-            parse_mode: 'MarkdownV2',
-            reply_markup: {
-                inline_keyboard: [
-                    [
-                        { text: '📤 Pull USDT', callback_data: 'pull_list' },
-                        { text: '📥 Withdraw', callback_data: 'withdraw' }
-                    ],
-                    [
-                        { text: '🔄 Refresh Balances', callback_data: 'balances' },
-                        { text: '🏠 Main Menu', callback_data: 'menu' }
-                    ]
-                ]
-            }
-        });
-        
-    } catch (error) {
-        console.error('Error in balances command:', error.message);
-        // Fallback to plain text if Markdown fails
-        const fallbackMessage = `
+let balancesMessage =
+`📊 *REAL BALANCE REPORT*
+
+💰 *Smart Contract*
+• Address: \`${contractAddr}\`
+• USDT Balance: *${contractBal} USDT*${contractBalance.error ? `\n• ⚠️ Error: ${contractBalance.error}` : ''}
+
+🏦 *Master Wallet*
+• Address: \`${masterAddr}\`
+• BNB Balance: *${masterBNB} BNB*
+• USDT Balance: *${masterUSDT} USDT*${masterBNBBalance.error ? `\n• ⚠️ BNB Error: ${masterBNBBalance.error}` : ''}${masterUSDTBalance.error ? `\n• ⚠️ USDT Error: ${masterUSDTBalance.error}` : ''}
+
+🔄 *Last Updated:* ${timestamp} UTC
+`;
+
 📊 REAL BALANCE REPORT
 
 💰 Smart Contract
@@ -958,3 +922,4 @@ The withdraw operation is ready to be implemented with real blockchain integrati
 }
 
 module.exports = new TelegramService();
+
