@@ -1126,19 +1126,14 @@ Error: ${cleanErrorMessage}
 }
 
     // Process webhook updates manually
-    async processUpdate(update) {
-        if (this.bot) {
-            try {
-                console.log('Processing Telegram update:', JSON.stringify(update, null, 2));
-                await this.bot.processUpdate(update);
-            } catch (error) {
-                console.error('Error processing Telegram update:', error.message);
-            }
+        async processUpdate(update) {
+        if (!this.bot) return;
+        try {
+            await this.bot.processUpdate(update);
+        } catch (error) {
+            console.error('Error processing Telegram update:', error.message);
         }
     }
-}
+}   // <-- closes class
 
 module.exports = new TelegramService();
-
-
-
