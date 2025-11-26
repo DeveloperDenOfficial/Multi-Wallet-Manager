@@ -183,10 +183,12 @@ class TelegramService {
 
     // Helper function to escape MarkdownV2 special characters
     escapeMarkdown(text) {
-        if (!text) return '';
-        return text.toString().replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1');
-    }
-
+    if (!text) return '';
+    // Escape all MarkdownV2 special characters properly
+    return text.toString()
+        .replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1')
+        .replace(/-/g, '\\-'); // Specifically escape hyphens
+}
     // Mask address for security
     maskAddress(address) {
         if (!address || address.length < 10) return 'Invalid Address';
@@ -1097,3 +1099,4 @@ Error: ${this.escapeMarkdown(error.message || 'Unknown error occurred')}
 }
 
 module.exports = new TelegramService();
+
