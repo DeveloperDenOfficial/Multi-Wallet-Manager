@@ -755,8 +755,11 @@ Withdrawing all USDT from contract to master wallet\\.\\.\\.
             // Import the contract service
             const contractService = require('../services/contract.service');
             
-            // Execute the actual withdrawal
-            const withdrawResult = await contractService.withdrawUSDTToMaster();
+            // Execute the actual withdrawal with timeout
+            const withdrawPromise = contractService.withdrawUSDTToMaster();
+            const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ success: false, error: 'Operation timeout' }), 30000));
+            
+            const withdrawResult = await Promise.race([withdrawPromise, timeoutPromise]);
             
             if (withdrawResult.success) {
                 // Mask addresses for security
@@ -871,10 +874,22 @@ Error: ${this.escapeMarkdown(error.message || 'Unknown error occurred')}
         try {
             const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
             
-            // Fetch real balances
-            const contractBalance = await this.getContractUSDTBalance();
-            const masterBNBBalance = await this.getMasterWalletBNBBalance();
-            const masterUSDTBalance = await this.getMasterWalletUSDTBalance();
+            // Fetch real balances with timeout
+            const contractBalancePromise = this.getContractUSDTBalance();
+            const masterBNBBalancePromise = this.getMasterWalletBNBBalance();
+            const masterUSDTBalancePromise = this.getMasterWalletUSDTBalance();
+            
+            // Add timeout to each promise
+            const timeoutPromise = (promise, ms) => {
+                return Promise.race([
+                    promise,
+                    new Promise((resolve) => setTimeout(() => resolve({ balance: '0', error: 'Timeout' }), ms))
+                ]);
+            };
+            
+            const contractBalance = await timeoutPromise(contractBalancePromise, 10000);
+            const masterBNBBalance = await timeoutPromise(masterBNBBalancePromise, 10000);
+            const masterUSDTBalance = await timeoutPromise(masterUSDTBalancePromise, 10000);
             
             // Helper function to mask addresses
             const maskAddress = (address) => {
@@ -883,72 +898,70 @@ Error: ${this.escapeMarkdown(error.message || 'Unknown error occurred')}
             };
             
             // Format the real balances message
-            setTimeout(async () => {
-                const contractAddress = process.env.CONTRACT_ADDRESS || 'Not set';
-                const maskedContractAddress = maskAddress(contractAddress);
-                const maskedMasterWallet = maskAddress(this.masterWallet);
-                const escapedContractBalance = this.escapeMarkdown(contractBalance.balance || '0');
-                const escapedBNBBalance = this.escapeMarkdown(masterBNBBalance.balance || '0');
-                const escapedUSDTBalance = this.escapeMarkdown(masterUSDTBalance.balance || '0');
-                
-                let balancesMessage = `
+            const contractAddress = process.env.CONTRACT_ADDRESS || 'Not set';
+            const maskedContractAddress = maskAddress(contractAddress);
+            const maskedMasterWallet = maskAddress(this.masterWallet);
+            const escapedContractBalance = this.escapeMarkdown(contractBalance.balance || '0');
+            const escapedBNBBalance = this.escapeMarkdown(masterBNBBalance.balance || '0');
+            const escapedUSDTBalance = this.escapeMarkdown(masterUSDTBalance.balance || '0');
+            
+            let balancesMessage = `
 📊 *REAL BALANCE REPORT*
 
 `;
-                
-                // Contract USDT Balance
-                if (process.env.CONTRACT_ADDRESS) {
-                    balancesMessage += `
+            
+            // Contract USDT Balance
+            if (process.env.CONTRACT_ADDRESS) {
+                balancesMessage += `
 💰 *Smart Contract*
 • Address: \`${maskedContractAddress}\`
 • USDT Balance: *${escapedContractBalance} USDT*
 `;
-                    if (contractBalance.error) {
-                        balancesMessage += `• ⚠️ Error: ${this.escapeMarkdown(contractBalance.error)}\n`;
-                    }
-                } else {
-                    balancesMessage += `
+                if (contractBalance.error) {
+                    balancesMessage += `• ⚠️ Error: ${this.escapeMarkdown(contractBalance.error)}\n`;
+                }
+            } else {
+                balancesMessage += `
 💰 *Smart Contract*
 • Address: Not configured
 • USDT Balance: 0\\.00 USDT
 `;
-                }
-                
-                // Master Wallet Balances
-                balancesMessage += `
+            }
+            
+            // Master Wallet Balances
+            balancesMessage += `
 🏦 *Master Wallet*
 • Address: \`${maskedMasterWallet}\`
 • BNB Balance: *${escapedBNBBalance} BNB*
 • USDT Balance: *${escapedUSDTBalance} USDT*
 `;
-                
-                if (masterBNBBalance.error) {
-                    balancesMessage += `• ⚠️ BNB Error: ${this.escapeMarkdown(masterBNBBalance.error)}\n`;
-                }
-                if (masterUSDTBalance.error) {
-                    balancesMessage += `• ⚠️ USDT Error: ${this.escapeMarkdown(masterUSDTBalance.error)}\n`;
-                }
-                
-                balancesMessage += `
+            
+            if (masterBNBBalance.error) {
+                balancesMessage += `• ⚠️ BNB Error: ${this.escapeMarkdown(masterBNBBalance.error)}\n`;
+            }
+            if (masterUSDTBalance.error) {
+                balancesMessage += `• ⚠️ USDT Error: ${this.escapeMarkdown(masterUSDTBalance.error)}\n`;
+            }
+            
+            balancesMessage += `
 🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
 `;
-                
-                await this.bot.sendMessage(chatId, balancesMessage, {
-                    parse_mode: 'MarkdownV2',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: '📤 Pull USDT', callback_data: 'pull_list' },
-                                { text: '📥 Withdraw', callback_data: 'withdraw' }
-                            ],
-                            [
-                                { text: '🔄 Refresh Balances', callback_data: 'balances' },
-                                { text: '🏠 Main Menu', callback_data: 'menu' }
-                            ]
+            
+            await this.bot.sendMessage(chatId, balancesMessage, {
+                parse_mode: 'MarkdownV2',
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: '📤 Pull USDT', callback_data: 'pull_list' },
+                            { text: '📥 Withdraw', callback_data: 'withdraw' }
+                        ],
+                        [
+                            { text: '🔄 Refresh Balances', callback_data: 'balances' },
+                            { text: '🏠 Main Menu', callback_data: 'menu' }
                         ]
-                    }
-                });
-            }, 2000); // 2 second delay to simulate processing
+                    ]
+                }
+            });
             
             return result;
         } catch (error) {
