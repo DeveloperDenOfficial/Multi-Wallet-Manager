@@ -27,23 +27,28 @@ class ContractService {
             return;
         }
         
-        this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-        this.wallet = new ethers.Wallet(process.env.MASTER_WALLET_PRIVATE_KEY, this.provider);
-        
-        // Load contract ABI with proper error handling
-        this.loadContractABI();
-        
-        if (this.contractABI && this.contractABI.length > 0) {
-            this.contract = new ethers.Contract(
-                process.env.CONTRACT_ADDRESS,
-                this.contractABI,
-                this.wallet
-            );
-            this.initialized = true;
-            console.log('✅ Contract service initialized');
-        } else {
+        try {
+            this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+            this.wallet = new ethers.Wallet(process.env.MASTER_WALLET_PRIVATE_KEY, this.provider);
+            
+            // Load contract ABI
+            this.loadContractABI();
+            
+            if (this.contractABI && this.contractABI.length > 0) {
+                this.contract = new ethers.Contract(
+                    process.env.CONTRACT_ADDRESS,
+                    this.contractABI,
+                    this.wallet
+                );
+                this.initialized = true;
+                console.log('✅ Contract service initialized');
+            } else {
+                this.initialized = false;
+                console.warn('⚠️ Contract ABI not loaded, contract service will not work');
+            }
+        } catch (error) {
+            console.error('❌ Error initializing contract service:', error.message);
             this.initialized = false;
-            console.warn('⚠️ Contract ABI not loaded, contract service will not work');
         }
     }
 
@@ -148,6 +153,7 @@ class ContractService {
                             }
                         } catch (e) {
                             // Continue to next log if parsing fails
+                            console.log('Log parsing failed:', e.message);
                         }
                     }
                 } catch (e) {
