@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Multi Wallet Manager</title>
+
+    <!-- Correct path -->
     <link rel="stylesheet" href="../styles/main.css">
+
     <style>
-        /* Add these styles to your main.css or include here */
         #wallet-options {
             margin: 20px 0;
             padding: 20px;
@@ -14,7 +16,6 @@
             border-radius: 8px;
             text-align: center;
         }
-        
         .wallet-options-container {
             display: flex;
             flex-wrap: wrap;
@@ -22,7 +23,6 @@
             justify-content: center;
             margin: 20px 0;
         }
-        
         .wallet-option {
             display: flex;
             align-items: center;
@@ -34,30 +34,18 @@
             cursor: pointer;
             transition: all 0.3s;
         }
-        
         .wallet-option:hover {
             background: #e9ecef;
             transform: translateY(-2px);
         }
-        
         .instruction {
             color: #6c757d;
             font-size: 0.9rem;
             margin-top: 15px;
         }
-        
-        @media (max-width: 768px) {
-            .wallet-options-container {
-                flex-direction: column;
-            }
-            
-            .wallet-option {
-                width: 100%;
-                justify-content: center;
-            }
-        }
     </style>
 </head>
+
 <body>
     <div id="app">
         <header>
@@ -67,24 +55,25 @@
                 <button id="connect-wallet">Connect Wallet</button>
             </div>
         </header>
-        
+
         <main>
             <div id="loading" class="loading hidden">Processing...</div>
-            
             <div id="wallet-info" class="hidden">
                 <h2>Wallet Information</h2>
                 <p>Address: <span id="wallet-address"></span></p>
                 <p>USDT Balance: <span id="usdt-balance">0.00</span> USDT</p>
                 <button id="approve-contract">Approve Contract</button>
             </div>
-            
-            <!-- Admin sections hidden -->
+
             <div id="admin-login" style="display: none;"></div>
             <div id="admin-panel" style="display: none;"></div>
         </main>
     </div>
-    
-    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js" type="application/javascript"></script>
-    <script src="../src/main.js" type="module"></script>
+
+    <!-- Ethers.js -->
+    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
+
+    <!-- Correct path -->
+    <script type="module" src="../src/main.js"></script>
 </body>
 </html>
