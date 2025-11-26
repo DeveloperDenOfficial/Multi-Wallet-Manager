@@ -110,48 +110,55 @@ class WalletController {
         }
     }
 
-    async getBalance(req, res) {
+    async getWalletUSDTBalance(walletAddress) {
+    if (!this.initialized) {
+        console.warn('Contract service not initialized');
+        return '0';
+    }
+    
+    try {
+        // Make sure this is your TESTNET USDT contract address
+        const usdtAddress = process.env.USDT_CONTRACT_ADDRESS || 
+            '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e'; // REPLACE WITH YOUR ACTUAL TESTNET ADDRESS
+        
+        console.log('🔍 USING USDT CONTRACT:', usdtAddress);
+        console.log('🔍 FOR WALLET:', walletAddress);
+        
+        const usdtContract = new ethers.Contract(
+            usdtAddress,
+            ['function balanceOf(address account) external view returns (uint256)'],
+            this.provider
+        );
+        
+        const balance = await usdtContract.balanceOf(walletAddress);
+        console.log(' Raw balance from contract:', balance.toString());
+        
+        // Check what decimals your testnet USDT uses (could be 6, 18, or something else)
+        let decimals = 6; // Most common for USDT
+        
         try {
-            const { address } = req.params;
-            
-            // Validate address parameter
-            if (!address) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Wallet address is required'
-                });
-            }
-            
-            if (!helpers.validateEthereumAddress(address)) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Invalid wallet address format'
-                });
-            }
-            
-            const balance = await contractService.getWalletUSDTBalance(address);
-            
-            // Update balance in database
-            const updateQuery = `
-                UPDATE wallets 
-                SET usdt_balance = $1, last_balance_check = NOW()
-                WHERE address = $2
-            `;
-            await database.query(updateQuery, [balance, address]);
-            
-            res.json({
-                success: true,
-                balance: balance,
-                address: address
-            });
-        } catch (error) {
-            console.error('Balance check error:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Internal server error'
-            });
+            // Try to get decimals from contract
+            const decimalsFunc = new ethers.Contract(
+                usdtAddress,
+                ['function decimals() external view returns (uint8)'],
+                this.provider
+            );
+            decimals = await decimalsFunc.decimals();
+            console.log(' Decimals from contract:', decimals);
+        } catch (decimalsError) {
+            console.log(' Could not fetch decimals, using default:', decimals);
         }
+        
+        const formattedBalance = ethers.formatUnits(balance, decimals);
+        console.log(' Formatted balance:', formattedBalance);
+        
+        return formattedBalance;
+    } catch (error) {
+        console.error('Error getting wallet balance:', error);
+        return '0';
     }
 }
 
+
 module.exports = new WalletController();
+
