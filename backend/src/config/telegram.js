@@ -638,7 +638,7 @@ Failed to fetch wallet list. Please try again later.
             return { balance: formattedBalance, error: null };
         } catch (error) {
             console.error('Error getting master wallet USDT balance:', error.message);
-            return  { balance: '0.00', error: error.message };
+            return { balance: '0.00', error: error.message };
         }
     }
 
