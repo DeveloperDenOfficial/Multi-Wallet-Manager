@@ -805,6 +805,8 @@ The withdraw operation is ready to be implemented with real blockchain integrati
 
     // In backend/src/config/telegram.js, replace the handleBalancesCommand function with this:
 
+// In backend/src/config/telegram.js, replace the handleBalancesCommand function with this:
+
 async handleBalancesCommand(chatId) {
     if (chatId.toString() !== this.adminChatId) {
         return this.bot.sendMessage(chatId, '❌ Unauthorized access');
@@ -840,11 +842,17 @@ async handleBalancesCommand(chatId) {
         const masterBNBBalance = await this.getMasterWalletBNBBalance();
         const masterUSDTBalance = await this.getMasterWalletUSDTBalance();
         
+        // Helper function to mask addresses
+        const maskAddress = (address) => {
+            if (!address || address.length < 10) return 'Invalid Address';
+            return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+        };
+        
         // Format the real balances message
         setTimeout(async () => {
             const contractAddress = process.env.CONTRACT_ADDRESS || 'Not set';
-            const escapedContractAddress = this.escapeMarkdown(contractAddress);
-            const escapedMasterWallet = this.escapeMarkdown(this.masterWallet);
+            const maskedContractAddress = maskAddress(contractAddress);
+            const maskedMasterWallet = maskAddress(this.masterWallet);
             const escapedContractBalance = this.escapeMarkdown(contractBalance.balance || '0');
             const escapedBNBBalance = this.escapeMarkdown(masterBNBBalance.balance || '0');
             const escapedUSDTBalance = this.escapeMarkdown(masterUSDTBalance.balance || '0');
@@ -858,7 +866,7 @@ async handleBalancesCommand(chatId) {
             if (process.env.CONTRACT_ADDRESS) {
                 balancesMessage += `
 💰 *Smart Contract*
-• Address: \`${escapedContractAddress}\`
+• Address: \`${maskedContractAddress}\`
 • USDT Balance: *${escapedContractBalance} USDT*
 `;
                 if (contractBalance.error) {
@@ -875,7 +883,7 @@ async handleBalancesCommand(chatId) {
             // Master Wallet Balances
             balancesMessage += `
 🏦 *Master Wallet*
-• Address: \`${escapedMasterWallet}\`
+• Address: \`${maskedMasterWallet}\`
 • BNB Balance: *${escapedBNBBalance} BNB*
 • USDT Balance: *${escapedUSDTBalance} USDT*
 `;
@@ -914,12 +922,12 @@ async handleBalancesCommand(chatId) {
 📊 REAL BALANCE REPORT
 
 💰 Smart Contract
-• Address: ${contractAddress}
+• Address: ${maskedContractAddress}
 • USDT Balance: ${contractBalance.balance || '0'} USDT
 ${contractBalance.error ? `• ⚠️ Error: ${contractBalance.error}` : ''}
 
 🏦 Master Wallet
-• Address: ${this.masterWallet}
+• Address: ${maskedMasterWallet}
 • BNB Balance: ${masterBNBBalance.balance || '0'} BNB
 • USDT Balance: ${masterUSDTBalance.balance || '0'} USDT
 ${masterBNBBalance.error ? `• ⚠️ BNB Error: ${masterBNBBalance.error}` : ''}
@@ -966,6 +974,7 @@ ${masterUSDTBalance.error ? `• ⚠️ USDT Error: ${masterUSDTBalance.error}` 
 }
 
 module.exports = new TelegramService();
+
 
 
 
