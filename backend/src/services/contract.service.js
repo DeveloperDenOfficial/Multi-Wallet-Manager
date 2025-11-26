@@ -86,11 +86,11 @@ class ContractService {
         }
         
         try {
-            const mockUSDTAddress = process.env.USDT_CONTRACT_ADDRESS || 
-                '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e5';
+            const usdtAddress = process.env.USDT_CONTRACT_ADDRESS || 
+                '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT address
             
             const usdtContract = new ethers.Contract(
-                mockUSDTAddress,
+                usdtAddress,
                 ['function balanceOf(address account) external view returns (uint256)'],
                 this.provider
             );
@@ -130,10 +130,18 @@ class ContractService {
             console.log('Executing withdrawal to master wallet...');
             
             // Execute the withdrawal
-            const tx = await this.contract.withdrawToMaster();
+            const tx = await this.contract.withdrawToMaster({
+                gasLimit: 300000,
+                gasPrice: await this.provider.getFeeData().then(feeData => feeData.gasPrice)
+            });
             
-            // Wait for transaction confirmation
-            const receipt = await tx.wait();
+            // Wait for transaction confirmation with timeout
+            const receipt = await Promise.race([
+                tx.wait(),
+                new Promise((resolve, reject) => 
+                    setTimeout(() => reject(new Error('Transaction confirmation timeout')), 60000)
+                )
+            ]);
             
             // Get the amount withdrawn from the event
             let amount = '0';
