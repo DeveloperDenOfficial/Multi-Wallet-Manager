@@ -202,21 +202,32 @@ class WalletManagerApp {
         }
     }
 
-    updateWalletUI(address) {
-        if (this.connectionStatus) {
-            this.connectionStatus.textContent = `Connected: ${address.substring(0, 6)}...${address.substring(38)}`;
-        }
-        if (this.connectButton) {
-            this.connectButton.textContent = 'Connected';
-            this.connectButton.disabled = true;
-        }
-        if (this.walletAddressElement) {
-            this.walletAddressElement.textContent = address;
-        }
-        if (this.usdtBalanceElement) {
+    async updateWalletUI(address) {
+    if (this.connectionStatus) {
+        this.connectionStatus.textContent = `Connected: ${address.substring(0, 6)}...${address.substring(38)}`;
+    }
+    if (this.connectButton) {
+        this.connectButton.textContent = 'Connected';
+        this.connectButton.disabled = true;
+    }
+    if (this.walletAddressElement) {
+        this.walletAddressElement.textContent = address;
+    }
+    
+    // Get real USDT balance
+    if (this.usdtBalanceElement) {
+        try {
+            this.usdtBalanceElement.textContent = 'Loading...';
+            const response = await this.apiService.getWalletBalance(address);
+            const balance = response.balance || '0.00';
+            this.usdtBalanceElement.textContent = parseFloat(balance).toFixed(2);
+        } catch (error) {
+            console.error('Error getting balance:', error);
             this.usdtBalanceElement.textContent = '0.00';
         }
     }
+}
+
 
     showWalletInfo() {
         if (this.walletInfo) {
@@ -276,3 +287,4 @@ class WalletManagerApp {
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new WalletManagerApp();
 });
+
