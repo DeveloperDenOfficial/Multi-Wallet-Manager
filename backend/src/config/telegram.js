@@ -196,7 +196,8 @@ class TelegramService {
     let t = text.toString();
 
     // Fully escape ALL MarkdownV2 special chars
-    return t.replace(/([_\*\[\]\(\)~`>#+\-=|{}\.!])/g, '\\$1');
+    return t.replace(/([_\*\[\]\(\)~`>#+\-=|{}\.!])/g, '\\$1').replace(/-/g, '\\-');
+
 }
     // Mask address for security
     maskAddress(address) {
@@ -1144,4 +1145,5 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
 
