@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Multi Wallet Manager</title>
 
-    <!-- Correct path -->
-    <link rel="stylesheet" href="../styles/main.css">
+    <!-- FIXED PATH for dist/ build -->
+    <link rel="stylesheet" href="./styles/main.css">
 
     <style>
         #wallet-options {
@@ -58,6 +58,7 @@
 
         <main>
             <div id="loading" class="loading hidden">Processing...</div>
+
             <div id="wallet-info" class="hidden">
                 <h2>Wallet Information</h2>
                 <p>Address: <span id="wallet-address"></span></p>
@@ -73,7 +74,7 @@
     <!-- Ethers.js -->
     <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
 
-    <!-- Correct path -->
-    <script type="module" src="../src/main.js"></script>
+    <!-- FIXED PATH for dist/ build -->
+    <script type="module" src="./src/main.js"></script>
 </body>
 </html>
