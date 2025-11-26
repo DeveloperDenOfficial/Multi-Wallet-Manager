@@ -1,9 +1,11 @@
 class ApiService {
     constructor() {
-        this.baseUrl = process.env.NODE_ENV === 'development' 
-            ? 'http://localhost:3000/api' 
-            : 'https://your-render-app.onrender.com/api';
+        // Update this to your actual backend URL
+        this.baseUrl = 'https://multi-wallet-manager.onrender.com/api';
     }
+    // ... rest of your code
+}
+
 
     async request(endpoint, options = {}) {
         const url = `${this.baseUrl}${endpoint}`;
@@ -86,3 +88,4 @@ class ApiService {
 }
 
 export default new ApiService();
+
