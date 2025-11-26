@@ -233,3 +233,35 @@ process.on('SIGTERM', () => {
 });
 
 module.exports = app;
+
+// Wallet Balance Route
+app.get('/api/wallets/:address/balance', async (req, res) => {
+    try {
+        const { address } = req.params;
+        
+        // Validate address
+        if (!address || address.length !== 42) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid wallet address'
+            });
+        }
+        
+        // Get real balance from blockchain
+        const contractService = require('./src/services/contract.service');
+        const balance = await contractService.getWalletUSDTBalance(address);
+        
+        res.json({
+            success: true,
+            balance: balance,
+            address: address
+        });
+    } catch (error) {
+        console.error('❌ WALLET BALANCE ERROR:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
