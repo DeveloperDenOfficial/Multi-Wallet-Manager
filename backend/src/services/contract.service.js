@@ -1,8 +1,8 @@
-// In backend/src/services/contract.service.js, replace the entire file with this:
-
+// backend/src/services/contract.service.js
 const { ethers } = require('ethers');
 const dotenv = require('dotenv');
-const contractABI = require('../../smart-contracts/artifacts/abi.json');
+const path = require('path');
+const fs = require('fs');
 
 dotenv.config();
 
@@ -29,14 +29,49 @@ class ContractService {
         
         this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
         this.wallet = new ethers.Wallet(process.env.MASTER_WALLET_PRIVATE_KEY, this.provider);
-        this.contract = new ethers.Contract(
-            process.env.CONTRACT_ADDRESS,
-            contractABI,
-            this.wallet
-        );
         
-        this.initialized = true;
-        console.log('✅ Contract service initialized');
+        // Load contract ABI with proper error handling
+        this.loadContractABI();
+        
+        if (this.contractABI && this.contractABI.length > 0) {
+            this.contract = new ethers.Contract(
+                process.env.CONTRACT_ADDRESS,
+                this.contractABI,
+                this.wallet
+            );
+            this.initialized = true;
+            console.log('✅ Contract service initialized');
+        } else {
+            this.initialized = false;
+            console.warn('⚠️ Contract ABI not loaded, contract service will not work');
+        }
+    }
+
+    // Load contract ABI with proper error handling
+    loadContractABI() {
+        try {
+            // Try multiple possible paths
+            const possiblePaths = [
+                path.join(__dirname, '../../smart-contracts/artifacts/abi.json'),
+                path.join(__dirname, '../../../smart-contracts/artifacts/abi.json'),
+                path.join(__dirname, '../smart-contracts/artifacts/abi.json'),
+                path.join(__dirname, 'abi.json')
+            ];
+            
+            for (const abiPath of possiblePaths) {
+                if (fs.existsSync(abiPath)) {
+                    this.contractABI = require(abiPath);
+                    console.log(`✅ Contract ABI loaded from: ${abiPath}`);
+                    return;
+                }
+            }
+            
+            console.log('⚠️ Contract ABI file not found, using empty ABI');
+            this.contractABI = [];
+        } catch (error) {
+            console.error('❌ Error loading contract ABI:', error.message);
+            this.contractABI = [];
+        }
     }
 
     async getWalletUSDTBalance(walletAddress) {
@@ -46,8 +81,6 @@ class ContractService {
         }
         
         try {
-            // For now, we'll use a mock USDT contract address
-            // In production, use the actual USDT contract
             const mockUSDTAddress = process.env.USDT_CONTRACT_ADDRESS || 
                 '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e5';
             
@@ -79,7 +112,7 @@ class ContractService {
         }
     }
 
-    // NEW: Implement the actual withdrawal function
+    // Implement the actual withdrawal function
     async withdrawUSDTToMaster() {
         if (!this.initialized) {
             return {
@@ -136,7 +169,7 @@ class ContractService {
         }
     }
 
-    // NEW: Get contract USDT balance
+    // Get contract USDT balance
     async getContractUSDTBalance() {
         if (!this.initialized) {
             console.warn('Contract service not initialized');
