@@ -2,6 +2,7 @@ const walletService = require('../services/wallet.service');
 const contractService = require('../services/contract.service');
 const database = require('../config/database');
 const validators = require('../utils/validators');
+const helpers = require('../utils/helpers');
 
 class WalletController {
     async connectWallet(req, res) {
