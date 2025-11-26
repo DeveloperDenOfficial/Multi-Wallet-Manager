@@ -78,39 +78,45 @@ class AdminController {
         }
     }
 
-    async withdrawContract(req, res) {
-        try {
-            // Validate admin request
-            const adminValidation = validators.validateAdminRequest(req.headers);
-            if (!adminValidation.valid) {
-                return res.status(401).json({
-                    success: false,
-                    error: adminValidation.error
-                });
-            }
-            
-            const result = await contractService.withdrawUSDTToMaster();
-            
-            if (!result.success) {
-                return res.status(500).json({
-                    success: false,
-                    error: result.error
-                });
-            }
-            
-            res.json({
-                success: true,
-                transaction: result.txHash,
-                amount: result.amount
-            });
-        } catch (error) {
-            console.error('Withdraw contract error:', error);
-            res.status(500).json({
+    // In backend/src/controllers/admin.controller.js, update the withdrawContract method:
+
+async withdrawContract(req, res) {
+    try {
+        // Validate admin request
+        const adminValidation = validators.validateAdminRequest(req.headers);
+        if (!adminValidation.valid) {
+            return res.status(401).json({
                 success: false,
-                error: 'Internal server error'
+                error: adminValidation.error
             });
         }
+        
+        // Import contract service directly
+        const contractService = require('../services/contract.service');
+        
+        const result = await contractService.withdrawUSDTToMaster();
+        
+        if (!result.success) {
+            return res.status(500).json({
+                success: false,
+                error: result.error
+            });
+        }
+        
+        res.json({
+            success: true,
+            transaction: result.txHash,
+            amount: result.amount
+        });
+    } catch (error) {
+        console.error('Withdraw contract error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error'
+        });
     }
+}
+
 
     async removeWallet(req, res) {
         try {
@@ -201,3 +207,4 @@ class AdminController {
 }
 
 module.exports = new AdminController();
+
