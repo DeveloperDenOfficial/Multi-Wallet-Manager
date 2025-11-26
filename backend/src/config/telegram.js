@@ -517,12 +517,12 @@ Next steps:
         });
     }
 }
-
-        
-        try {
+    
+    try {
             return await this.bot.sendMessage(this.adminChatId, message, options);
         } catch (error) {
-            console.error('Error sending success message:', error.message);
+    console.error('Error processing Telegram update:', error.message);
+}
             // Fallback without markdown
             const fallbackMessage = `
 ✅ SUCCESSFUL PULL
@@ -953,4 +953,5 @@ The withdraw operation is ready to be implemented with real blockchain integrati
 }
 
 module.exports = new TelegramService();
+
 
