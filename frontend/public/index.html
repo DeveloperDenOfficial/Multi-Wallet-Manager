@@ -20,6 +20,40 @@
             font-size: 1.5rem; 
             z-index: 1000;
         }
+        #wallet-options {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .wallet-options-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        .wallet-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 20px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .wallet-option:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+        }
+        .instruction {
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-top: 15px;
+        }
     </style>
 </head>
 <body>
@@ -47,8 +81,8 @@
         </main>
     </div>
     
-<script src="https://cdnjs.cloudflare.com/ajax/libs/web3/1.10.0/web3.min.js"></script>
-    <script src="src/main.js" type="module"></script>
+    <!-- Load ethers.js from a reliable CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <script src="src/main.js"></script>
 </body>
 </html>
-
