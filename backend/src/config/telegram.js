@@ -191,18 +191,21 @@ class TelegramService {
     }
 
     // escape MarkdownV2 special characters, defensive: accept numbers/objects
-    escapeMarkdown(text) {
-    if (!text) return '';
-
-    return text
-        .toString()
-        .replace(/([_\*\[\]\(\)~`>#+\=\|\{\}\.!])/g, '\\$1')
-        .replace(/-/g, '\\-')     // REQUIRED
-        .replace(/\./g, '\\.')    // Telegram sensitive
-        .replace(/\+/g, '\\+')    
-        .replace(/=/g, '\\=');   
+    // REPLACE your existing escapeMarkdown function with this one:
+escapeMarkdown(text) {
+    if (!text && text !== 0) return '';
+    
+    // Convert to string first
+    let result = String(text);
+    
+    // Escape backslashes first to prevent double escaping
+    result = result.replace(/\\/g, '\\\\');
+    
+    // Then escape all MarkdownV2 special characters
+    result = result.replace(/([_\*\[\]\(\)~`>#+\-=|{}\.!])/g, '\\$1');
+    
+    return result;
 }
-
     // Mask address for security
     maskAddress(address) {
         if (!address || typeof address !== 'string') return 'Invalid Address';
@@ -1018,64 +1021,54 @@ Error: ${this.escapeMarkdown(error && error.message ? error.message : String(err
             const masterBNBBalance = await timeoutWrapper(masterBNBBalancePromise, 15000);
             const masterUSDTBalance = await timeoutWrapper(masterUSDTBalancePromise, 15000);
 
-            // Format the real balances message
-            // Format the real balances message
+// Format the real balances message
+// REPLACE the balances message formatting section with this:
 const contractAddress = process.env.CONTRACT_ADDRESS || 'Not set';
 const maskedContractAddress = this.maskAddress(contractAddress);
 const maskedMasterWallet = this.maskAddress(this.masterWallet);
 
-// Escape everything that will go into MarkdownV2
+// Escape all values that will be used in MarkdownV2
 const escapedContractAddress = this.escapeMarkdown(maskedContractAddress);
 const escapedMasterWallet = this.escapeMarkdown(maskedMasterWallet);
-const escapedContractBalance = this.escapeMarkdown(contractBalance.balance || '0');
-const escapedBNBBalance = this.escapeMarkdown(masterBNBBalance.balance || '0');
-const escapedUSDTBalance = this.escapeMarkdown(masterUSDTBalance.balance || '0');
-const escapedContractError = contractBalance.error ? this.escapeMarkdown(String(contractBalance.error)) : null;
-const escapedBNBError = masterBNBBalance.error ? this.escapeMarkdown(String(masterBNBBalance.error)) : null;
-const escapedUSDTError = masterUSDTBalance.error ? this.escapeMarkdown(String(masterUSDTBalance.error)) : null;
+const escapedContractBalance = this.escapeMarkdown(contractBalance && contractBalance.balance ? contractBalance.balance : '0');
+const escapedBNBBalance = this.escapeMarkdown(masterBNBBalance && masterBNBBalance.balance ? masterBNBBalance.balance : '0');
+const escapedUSDTBalance = this.escapeMarkdown(masterUSDTBalance && masterUSDTBalance.balance ? masterUSDTBalance.balance : '0');
 const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
-let balancesMessage = `
-📊 *REAL BALANCE REPORT*
-
-`;
+let balancesMessage = `📊 *REAL BALANCE REPORT*\n\n`;
 
 // Contract USDT Balance
 if (process.env.CONTRACT_ADDRESS) {
-    balancesMessage += `
-💰 *Smart Contract*
-• Address: \`${escapedContractAddress}\`
-• USDT Balance: *${escapedContractBalance} USDT*
-`;
-    if (escapedContractError) {
-        balancesMessage += `• ⚠️ Error: ${escapedContractError}\n`;
+    balancesMessage += `💰 *Smart Contract*\n`;
+    balancesMessage += `• Address: \`${escapedContractAddress}\`\n`;
+    balancesMessage += `• USDT Balance: *${escapedContractBalance} USDT*\n`;
+    
+    if (contractBalance && contractBalance.error) {
+        const escapedError = this.escapeMarkdown(contractBalance.error);
+        balancesMessage += `• ⚠️ Error: ${escapedError}\n`;
     }
 } else {
-    balancesMessage += `
-💰 *Smart Contract*
-• Address: Not configured
-• USDT Balance: 0\\.00 USDT
-`;
+    balancesMessage += `💰 *Smart Contract*\n`;
+    balancesMessage += `• Address: Not configured\n`;
+    balancesMessage += `• USDT Balance: 0\\.00 USDT\n`;
 }
 
 // Master Wallet Balances
-balancesMessage += `
-🏦 *Master Wallet*
-• Address: \`${escapedMasterWallet}\`
-• BNB Balance: *${escapedBNBBalance} BNB*
-• USDT Balance: *${escapedUSDTBalance} USDT*
-`;
+balancesMessage += `\n🏦 *Master Wallet*\n`;
+balancesMessage += `• Address: \`${escapedMasterWallet}\`\n`;
+balancesMessage += `• BNB Balance: *${escapedBNBBalance} BNB*\n`;
+balancesMessage += `• USDT Balance: *${escapedUSDTBalance} USDT*\n`;
 
-if (escapedBNBError) {
-    balancesMessage += `• ⚠️ BNB Error: ${escapedBNBError}\n`;
+if (masterBNBBalance && masterBNBBalance.error) {
+    const escapedError = this.escapeMarkdown(masterBNBBalance.error);
+    balancesMessage += `• ⚠️ BNB Error: ${escapedError}\n`;
 }
-if (escapedUSDTError) {
-    balancesMessage += `• ⚠️ USDT Error: ${escapedUSDTError}\n`;
+if (masterUSDTBalance && masterUSDTBalance.error) {
+    const escapedError = this.escapeMarkdown(masterUSDTBalance.error);
+    balancesMessage += `• ⚠️ USDT Error: ${escapedError}\n`;
 }
 
-balancesMessage += `
-🔄 *Last Updated:* ${escapedTimestamp}
-`;
+balancesMessage += `\n🔄 *Last Updated:* ${escapedTimestamp}`;
 
 await this.bot.sendMessage(chatId, balancesMessage, {
     parse_mode: 'MarkdownV2',
@@ -1092,6 +1085,7 @@ await this.bot.sendMessage(chatId, balancesMessage, {
         ]
     }
 });
+
 
             return result;
         } catch (error) {
@@ -1158,6 +1152,7 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
 
 
 
