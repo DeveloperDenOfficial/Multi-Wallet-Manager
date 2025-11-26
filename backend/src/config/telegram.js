@@ -188,10 +188,22 @@ class TelegramService {
     // Helper function to escape MarkdownV2 special characters
 escapeMarkdown(text) {
     if (!text) return '';
-    return text.toString()
+    // First, decode any existing escapes to avoid double escaping
+    let cleanText = text.toString();
+    
+    // Handle the specific case of error messages with backslashes
+    cleanText = cleanText.replace(/\\'/g, "'");  // Fix escaped single quotes
+    cleanText = cleanText.replace(/\\-/g, "-");  // Fix escaped hyphens
+    
+    // Then properly escape all MarkdownV2 special characters
+    return cleanText
         .replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1')
-        .replace(/\-/g, '\\-'); // Extra escaping for hyphens
+        .replace(/\-/g, '\\-')  // Extra escaping for hyphens
+        .replace(/\./g, '\\.')  // Extra escaping for periods
+        .replace(/\+/g, '\\+')  // Extra escaping for plus signs
+        .replace(/\=/g, '\\='); // Extra escaping for equals
 }
+
 
     // Mask address for security
     maskAddress(address) {
@@ -1065,29 +1077,53 @@ Error: ${this.escapeMarkdown(error.message || 'Unknown error occurred')}
             
             return result;
         } catch (error) {
-            console.error('Error in balances command:', error);
-            
-            const errorMessage = `
+    console.error('Error in balances command:', error);
+    
+    // Create a clean error message without special characters
+    const cleanErrorMessage = error.message 
+        ? error.message.replace(/[^a-zA-Z0-9\s\.\,\!\?\-]/g, '').substring(0, 200)
+        : 'Unknown error occurred';
+    
+    const errorMessage = `
 ❌ *BALANCES FAILED*
-Error: ${this.escapeMarkdown(error.message || 'Unknown error occurred')}
+Error: ${this.escapeMarkdown(cleanErrorMessage)}
 
 🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
-            `;
-            
-            await this.bot.sendMessage(chatId, errorMessage, {
-                parse_mode: 'MarkdownV2',
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
-                        ]
+    `;
+    
+    // Send with fallback to plain text if markdown fails
+    try {
+        await this.bot.sendMessage(chatId, errorMessage, {
+            parse_mode: 'MarkdownV2',
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: '🏠 Main Menu', callback_data: 'menu' }
                     ]
-                }
-            });
-            
-            return this.bot.sendMessage(chatId, `❌ Error: ${error.message}`);
-        }
+                ]
+            }
+        });
+    } catch (markdownError) {
+        // Fallback without markdown
+        const fallbackMessage = `
+❌ BALANCES FAILED
+Error: ${cleanErrorMessage}
+
+🔄 Last Updated: ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
+        `;
+        await this.bot.sendMessage(chatId, fallbackMessage, {
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: '🏠 Main Menu', callback_data: 'menu' }
+                    ]
+                ]
+            }
+        });
     }
+    
+    return this.bot.sendMessage(chatId, `❌ Error: ${cleanErrorMessage}`);
+}
 
     // Process webhook updates manually
     async processUpdate(update) {
@@ -1103,5 +1139,6 @@ Error: ${this.escapeMarkdown(error.message || 'Unknown error occurred')}
 }
 
 module.exports = new TelegramService();
+
 
 
