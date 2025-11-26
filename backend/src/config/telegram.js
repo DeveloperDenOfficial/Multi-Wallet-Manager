@@ -192,16 +192,16 @@ class TelegramService {
 
     // escape MarkdownV2 special characters, defensive: accept numbers/objects
     escapeMarkdown(text) {
-    if (!text) return '';
-
-    return text
-        .toString()
-        .replace(/([_\*\[\]\(\)~`>#+\=\|\{\}\.!])/g, '\\$1')
-        .replace(/-/g, '\\-')     // REQUIRED
-        .replace(/\./g, '\\.')    // Telegram sensitive
-        .replace(/\+/g, '\\+')    
-        .replace(/=/g, '\\=');   
+    escapeMarkdown(text) {
+    if (!text && text !== 0) return '';
+    
+    // Convert to string and escape all MarkdownV2 special characters
+    // Order matters: escape backslashes first, then other characters
+    return String(text)
+        .replace(/\\/g, '\\\\')  // Escape backslashes first
+        .replace(/([_\*\[\]\(\)~`>#+\-=|{}\.!])/g, '\\$1');
 }
+
 
     // Mask address for security
     maskAddress(address) {
@@ -1149,3 +1149,4 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
