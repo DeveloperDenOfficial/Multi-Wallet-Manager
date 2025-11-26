@@ -192,13 +192,17 @@ class TelegramService {
 
     // escape MarkdownV2 special characters, defensive: accept numbers/objects
     escapeMarkdown(text) {
-    if (text === null || text === undefined) return '';
-    let t = text.toString();
+    if (!text) return '';
 
-    // Fully escape ALL MarkdownV2 special chars
-    return t.replace(/([_\*\[\]\(\)~`>#+\-=|{}\.!])/g, '\\$1').replace(/-/g, '\\-');
-
+    return text
+        .toString()
+        .replace(/([_\*\[\]\(\)~`>#+\=\|\{\}\.!])/g, '\\$1')
+        .replace(/-/g, '\\-')     // REQUIRED
+        .replace(/\./g, '\\.')    // Telegram sensitive
+        .replace(/\+/g, '\\+')    
+        .replace(/=/g, '\\=');   
 }
+
     // Mask address for security
     maskAddress(address) {
         if (!address || typeof address !== 'string') return 'Invalid Address';
@@ -1145,5 +1149,6 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
 
 
