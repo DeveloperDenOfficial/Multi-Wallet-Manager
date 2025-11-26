@@ -400,79 +400,110 @@ Actions:
         }
     }
 
-    async sendBalanceAlert(walletAddress, balance) {
-        if (!this.bot || !this.adminChatId) return;
-        
-        const escapedAddress = this.escapeMarkdown(walletAddress);
-        const escapedBalance = this.escapeMarkdown(balance);
-        
-        const message = `
+    // Helper function to escape MarkdownV2 special characters
+escapeMarkdown(text) {
+    if (!text) return '';
+    return text.toString().replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1');
+}
+
+async sendBalanceAlert(walletAddress, balance) {
+    if (!this.bot || !this.adminChatId) return;
+    
+    const escapedAddress = this.escapeMarkdown(walletAddress);  // Escape the wallet address
+    const escapedBalance = this.escapeMarkdown(balance);        // Escape the balance
+    
+    const message = `
 💰 *BALANCE ALERT*
 Address: \`${escapedAddress}\`
-USDT Balance: *${escapedBalance} USDT* \\(> \\$10\\)
+USDT Balance: *${escapedBalance} USDT* (> \$10)
+
+Actions:
+    `;
+
+    const options = {
+        parse_mode: 'MarkdownV2',
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    { text: '📤 Pull USDT', callback_data: `pull_${escapedAddress}` }
+                ],
+                [
+                    { text: '🏠 Main Menu', callback_data: 'menu' }
+                ]
+            ]
+        }
+    };
+
+    try {
+        return await this.bot.sendMessage(this.adminChatId, message, options);
+    } catch (error) {
+        console.error('Error sending balance alert:', error.message);
+        const fallbackMessage = `
+💰 BALANCE ALERT
+Address: ${escapedAddress}
+USDT Balance: ${escapedBalance} USDT (> $10)
 
 Actions:
         `;
-        
-        const options = {
-            parse_mode: 'MarkdownV2',
+        return await this.bot.sendMessage(this.adminChatId, fallbackMessage, {
             reply_markup: {
                 inline_keyboard: [
                     [
-                        { text: '📤 Pull USDT', callback_data: `pull_${walletAddress}` }
+                        { text: '📤 Pull USDT', callback_data: `pull_${escapedAddress}` }
                     ],
                     [
                         { text: '🏠 Main Menu', callback_data: 'menu' }
                     ]
                 ]
             }
-        };
-        
-        try {
-            return await this.bot.sendMessage(this.adminChatId, message, options);
-        } catch (error) {
-            console.error('Error sending balance alert:', error.message);
-            // Fallback without markdown
-            const fallbackMessage = `
-💰 BALANCE ALERT
-Address: ${walletAddress}
-USDT Balance: ${balance} USDT (> $10)
-
-Actions:
-            `;
-            return await this.bot.sendMessage(this.adminChatId, fallbackMessage, {
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '📤 Pull USDT', callback_data: `pull_${walletAddress}` }
-                        ],
-                        [
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
-                        ]
-                    ]
-                }
-            });
-        }
+        });
     }
+}
+
 
     async sendSuccessMessage(walletAddress, amount, txHash) {
-        if (!this.bot || !this.adminChatId) return;
-        
-        const escapedAddress = this.escapeMarkdown(walletAddress);
-        const escapedAmount = this.escapeMarkdown(amount);
-        const escapedTxHash = this.escapeMarkdown(txHash);
-        
-        const message = `
+    if (!this.bot || !this.adminChatId) return;
+    
+    const escapedAddress = this.escapeMarkdown(walletAddress);  // Escape wallet address
+    const escapedAmount = this.escapeMarkdown(amount);          // Escape amount
+    const escapedTxHash = this.escapeMarkdown(txHash);          // Escape transaction hash
+    
+    const message = `
 ✅ *SUCCESSFUL PULL*
 Address: \`${escapedAddress}\`
 Amount: *${escapedAmount} USDT*
 Transaction: \`${escapedTxHash}\`
 
 Next steps:
+    `;
+
+    const options = {
+        parse_mode: 'MarkdownV2',
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    { text: '📥 Withdraw to Master', callback_data: 'withdraw' }
+                ],
+                [
+                    { text: '🏠 Main Menu', callback_data: 'menu' }
+                ]
+            ]
+        }
+    };
+
+    try {
+        return await this.bot.sendMessage(this.adminChatId, message, options);
+    } catch (error) {
+        console.error('Error sending success message:', error.message);
+        const fallbackMessage = `
+✅ SUCCESSFUL PULL
+Address: ${escapedAddress}
+Amount: ${escapedAmount} USDT
+Transaction: ${escapedTxHash}
+
+Next steps:
         `;
-        
-        const options = {
-            parse_mode: 'MarkdownV2',
+        return await this.bot.sendMessage(this.adminChatId, fallbackMessage, {
             reply_markup: {
                 inline_keyboard: [
                     [
@@ -483,7 +514,10 @@ Next steps:
                     ]
                 ]
             }
-        };
+        });
+    }
+}
+
         
         try {
             return await this.bot.sendMessage(this.adminChatId, message, options);
@@ -919,3 +953,4 @@ The withdraw operation is ready to be implemented with real blockchain integrati
 }
 
 module.exports = new TelegramService();
+
