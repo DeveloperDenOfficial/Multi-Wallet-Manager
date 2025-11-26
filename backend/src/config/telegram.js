@@ -154,14 +154,18 @@ class TelegramService {
         });
 
         // Button callbacks
-        this.bot.on('callback_query', (callbackQuery) => {
-            const action = callbackQuery.data;
-            const chatId = callbackQuery.message.chat.id;
-            
-            console.log('Received callback query:', action, 'from chat:', chatId);
+        this.bot.on('callback_query', async (callbackQuery) => {
+    const action = callbackQuery.data;
+    const chatId = callbackQuery.message.chat.id;
+    
+    console.log('Received callback query:', action, 'from chat:', chatId);
             
             // Answer the callback query to remove loading state
-            this.bot.answerCallbackQuery(callbackQuery.id);
+            try {
+        await this.bot.answerCallbackQuery(callbackQuery.id);
+    } catch (error) {
+        console.error('Error answering callback query:', error.message);
+    }
             
             // Handle different actions
             if (action === 'withdraw') {
@@ -182,13 +186,13 @@ class TelegramService {
     }
 
     // Helper function to escape MarkdownV2 special characters
-    escapeMarkdown(text) {
+escapeMarkdown(text) {
     if (!text) return '';
-    // Escape all MarkdownV2 special characters properly
     return text.toString()
         .replace(/([_\*\[\]\(\)~\`>\#\+\-\=\|\{\}\.])/g, '\\$1')
-        .replace(/-/g, '\\-'); // Specifically escape hyphens
+        .replace(/\-/g, '\\-'); // Extra escaping for hyphens
 }
+
     // Mask address for security
     maskAddress(address) {
         if (!address || address.length < 10) return 'Invalid Address';
@@ -1099,4 +1103,5 @@ Error: ${this.escapeMarkdown(error.message || 'Unknown error occurred')}
 }
 
 module.exports = new TelegramService();
+
 
