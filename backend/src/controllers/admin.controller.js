@@ -80,6 +80,7 @@ class AdminController {
 
     // In backend/src/controllers/admin.controller.js, update the withdrawContract method:
 
+// backend/src/controllers/admin.controller.js (only the withdrawContract method)
 async withdrawContract(req, res) {
     try {
         // Validate admin request
@@ -116,8 +117,6 @@ async withdrawContract(req, res) {
         });
     }
 }
-
-
     async removeWallet(req, res) {
         try {
             // Validate admin request
@@ -207,4 +206,5 @@ async withdrawContract(req, res) {
 }
 
 module.exports = new AdminController();
+
 
