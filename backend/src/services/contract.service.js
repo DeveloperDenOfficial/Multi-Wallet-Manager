@@ -58,8 +58,7 @@ class ContractService {
             // Try multiple possible paths
             const possiblePaths = [
                 path.join(__dirname, '../../smart-contracts/artifacts/abi.json'),
-                path.join(__](streamdown:incomplete-link)
-dirname, '../../../smart-contracts/artifacts/abi.json'),
+                path.join(__dirname, '../../../smart-contracts/artifacts/abi.json'),
                 path.join(__dirname, '../smart-contracts/artifacts/abi.json'),
                 path.join(__dirname, 'abi.json')
             ];
