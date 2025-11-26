@@ -238,7 +238,7 @@ Welcome to your USDT management system\\. Select an option below:
                 inline_keyboard: [
                     [
                         { text: '📤 Show Wallets', callback_data: 'pull_list' },
-                        { text: '📥 Withdraw', callback_data: 'withdraw' }
+                        { text: '📥  Withdraw Contract Balance', callback_data: 'withdraw' }
                     ],
                     [
                         { text: '📊 Balances', callback_data: 'balances' },
@@ -1600,7 +1600,7 @@ Error: ${this.escapeMarkdown(error && error.message ? error.message : 'Unknown e
                     inline_keyboard: [
                         [
                             { text: '📤 Show Wallets', callback_data: 'pull_list' },
-                            { text: '📥 Withdraw', callback_data: 'withdraw' }
+                            { text: '📥 Withdraw Contract Balance', callback_data: 'withdraw' }
                         ],
                         [
                             { text: '🔄 Refresh Balances', callback_data: 'balances' },
@@ -1686,4 +1686,5 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
 
