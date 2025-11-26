@@ -21,11 +21,14 @@ class WalletConnector {
                 throw new Error('No Ethereum wallet found. Please install MetaMask or Trust Wallet.');
             }
 
+            // Request account access
             const accounts = await window.ethereum.request({
                 method: 'eth_requestAccounts'
             });
 
             this.walletAddress = accounts[0];
+            
+            // Create provider and signer
             this.provider = new ethers.providers.Web3Provider(window.ethereum);
             this.signer = this.provider.getSigner();
 
@@ -36,7 +39,7 @@ class WalletConnector {
         } catch (error) {
             return {
                 success: false,
-                error: error.message
+                error: error.message || 'Failed to connect wallet'
             };
         }
     }
@@ -47,8 +50,11 @@ class WalletConnector {
                 throw new Error('Wallet not connected');
             }
             
+            // USDT contract address (replace with your actual USDT contract)
+            const usdtContractAddress = '0xdAC17F958D2ee523a2206206994597C13D831ec7'; // Mainnet USDT
+            
             const usdtContract = new ethers.Contract(
-                process.env.USDT_CONTRACT_ADDRESS || '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e5', // USDT contract address
+                usdtContractAddress,
                 ['function approve(address spender, uint256 amount) public returns (bool)'],
                 this.signer
             );
@@ -67,42 +73,8 @@ class WalletConnector {
         } catch (error) {
             return {
                 success: false,
-                error: error.message
+                error: error.message || 'Failed to approve contract'
             };
-        }
-    }
-
-    async getBalance() {
-        try {
-            if (!this.provider || !this.walletAddress) {
-                throw new Error('Wallet not connected');
-            }
-            
-            const balance = await this.provider.getBalance(this.walletAddress);
-            return ethers.utils.formatEther(balance);
-        } catch (error) {
-            console.error('Error getting balance:', error);
-            return '0';
-        }
-    }
-
-    async getUSDTBalance() {
-        try {
-            if (!this.walletAddress || !this.provider) {
-                throw new Error('Wallet not connected');
-            }
-
-            const usdtContract = new ethers.Contract(
-                process.env.USDT_CONTRACT_ADDRESS || '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e5',
-                ['function balanceOf(address account) external view returns (uint256)'],
-                this.provider
-            );
-
-            const balance = await usdtContract.balanceOf(this.walletAddress);
-            return ethers.utils.formatUnits(balance, 18); // USDT has 18 decimals
-        } catch (error) {
-            console.error('Error getting USDT balance:', error);
-            return '0';
         }
     }
 }
