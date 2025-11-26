@@ -1,11 +1,8 @@
 class ApiService {
     constructor() {
-        // Update this to your actual backend URL
+        // Make sure this points to your backend correctly
         this.baseUrl = 'https://multi-wallet-manager.onrender.com/api';
     }
-    // ... rest of your code
-}
-
 
     async request(endpoint, options = {}) {
         const url = `${this.baseUrl}${endpoint}`;
@@ -49,6 +46,8 @@ class ApiService {
         return this.request(`/wallets/${walletAddress}/balance`);
     }
 
+    // Remove these methods since we're removing admin functionality
+    /*
     async pullWallet(walletAddress, adminKey) {
         return this.request('/admin/pull', {
             method: 'POST',
@@ -68,16 +67,6 @@ class ApiService {
         });
     }
 
-    async removeWallet(walletAddress, adminKey) {
-        return this.request('/admin/remove', {
-            method: 'POST',
-            headers: {
-                'X-Admin-Key': adminKey
-            },
-            body: JSON.stringify({ walletAddress })
-        });
-    }
-
     async getAllWallets(adminKey) {
         return this.request('/admin/balances', {
             headers: {
@@ -85,7 +74,7 @@ class ApiService {
             }
         });
     }
+    */
 }
 
 export default new ApiService();
-
