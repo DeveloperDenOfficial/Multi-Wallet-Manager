@@ -1,3 +1,5 @@
+// In backend/src/services/contract.service.js, replace the entire file with this:
+
 const { ethers } = require('ethers');
 const dotenv = require('dotenv');
 const contractABI = require('../../smart-contracts/artifacts/abi.json');
@@ -19,11 +21,18 @@ class ContractService {
             return;
         }
         
+        if (!process.env.MASTER_WALLET_PRIVATE_KEY) {
+            console.warn('⚠️ MASTER_WALLET_PRIVATE_KEY not found, contract service will not work');
+            this.initialized = false;
+            return;
+        }
+        
         this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+        this.wallet = new ethers.Wallet(process.env.MASTER_WALLET_PRIVATE_KEY, this.provider);
         this.contract = new ethers.Contract(
             process.env.CONTRACT_ADDRESS,
             contractABI,
-            this.provider
+            this.wallet
         );
         
         this.initialized = true;
@@ -67,6 +76,79 @@ class ContractService {
         } catch (error) {
             console.error('Error checking wallet approval:', error);
             return false;
+        }
+    }
+
+    // NEW: Implement the actual withdrawal function
+    async withdrawUSDTToMaster() {
+        if (!this.initialized) {
+            return {
+                success: false,
+                error: 'Contract service not initialized'
+            };
+        }
+        
+        try {
+            console.log('Executing withdrawal to master wallet...');
+            
+            // Execute the withdrawal
+            const tx = await this.contract.withdrawToMaster();
+            
+            // Wait for transaction confirmation
+            const receipt = await tx.wait();
+            
+            // Get the amount withdrawn from the event
+            let amount = '0';
+            if (receipt.logs && receipt.logs.length > 0) {
+                try {
+                    // Parse the USDTWithdrawn event
+                    const eventInterface = new ethers.Interface([
+                        "event USDTWithdrawn(address indexed to, uint256 amount)"
+                    ]);
+                    
+                    for (const log of receipt.logs) {
+                        try {
+                            const parsedLog = eventInterface.parseLog(log);
+                            if (parsedLog && parsedLog.name === 'USDTWithdrawn') {
+                                amount = ethers.formatUnits(parsedLog.args.amount, 18);
+                                break;
+                            }
+                        } catch (e) {
+                            // Continue to next log if parsing fails
+                        }
+                    }
+                } catch (e) {
+                    console.log('Could not parse event, using default amount');
+                }
+            }
+            
+            return {
+                success: true,
+                txHash: tx.hash,
+                amount: amount
+            };
+        } catch (error) {
+            console.error('Error during withdrawal:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    // NEW: Get contract USDT balance
+    async getContractUSDTBalance() {
+        if (!this.initialized) {
+            console.warn('Contract service not initialized');
+            return '0';
+        }
+        
+        try {
+            const balance = await this.contract.getContractUSDT();
+            return ethers.formatUnits(balance, 18);
+        } catch (error) {
+            console.error('Error getting contract USDT balance:', error);
+            return '0';
         }
     }
 }
