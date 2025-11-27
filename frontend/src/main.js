@@ -3,12 +3,12 @@ import { BrowserProvider, Contract, ethers } from 'ethers'
 
 // Configuration from environment variables
 const CONFIG = {
-  API_URL: __VITE_API_URL__,
-  CONTRACT_ADDRESS: __VITE_CONTRACT_ADDRESS__,
-  USDT_CONTRACT_ADDRESS: __VITE_USDT_CONTRACT_ADDRESS__,
-  CHAIN_ID: __VITE_CHAIN_ID__,
-  CHAIN_NAME: __VITE_CHAIN_NAME__,
-  RPC_URL: __VITE_RPC_URL__
+  API_URL: typeof __VITE_API_URL__ !== 'undefined' ? __VITE_API_URL__ : 'https://multi-wallet-manager.onrender.com/api',
+  CONTRACT_ADDRESS: typeof __VITE_CONTRACT_ADDRESS__ !== 'undefined' ? __VITE_CONTRACT_ADDRESS__ : '0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF',
+  USDT_CONTRACT_ADDRESS: typeof __VITE_USDT_CONTRACT_ADDRESS__ !== 'undefined' ? __VITE_USDT_CONTRACT_ADDRESS__ : '0x2f79e9e36c0d293f3c88F4aF05ABCe224c0A5638',
+  CHAIN_ID: typeof __VITE_CHAIN_ID__ !== 'undefined' ? __VITE_CHAIN_ID__ : '97',
+  CHAIN_NAME: typeof __VITE_CHAIN_NAME__ !== 'undefined' ? __VITE_CHAIN_NAME__ : 'BSC Testnet',
+  RPC_URL: typeof __VITE_RPC_URL__ !== 'undefined' ? __VITE_RPC_URL__ : 'https://bsc-testnet.publicnode.com'
 }
 
 // DOM Elements
