@@ -8,47 +8,44 @@ dotenv.config();
 
 class ContractService {
     constructor() {
-        // Validate required environment variables
-        if (!process.env.RPC_URL) {
-            console.warn('⚠️ RPC_URL not found, contract service will not work');
-            this.initialized = false;
-            return;
-        }
-        
-        if (!process.env.CONTRACT_ADDRESS) {
-            console.warn('⚠️ CONTRACT_ADDRESS not found, contract service will not work');
-            this.initialized = false;
-            return;
-        }
-        
-        if (!process.env.MASTER_WALLET_PRIVATE_KEY) {
-            console.warn('⚠️ MASTER_WALLET_PRIVATE_KEY not found, contract service will not work');
-            this.initialized = false;
-            return;
-        }
+        // Validate required environment variables for transaction operations
+        this.initialized = false;
+        this.provider = null;
+        this.wallet = null;
+        this.contract = null;
+        this.contractABI = [];
         
         try {
+            if (!process.env.RPC_URL) {
+                console.warn('⚠️ RPC_URL not found');
+                return;
+            }
+            
             this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-            this.wallet = new ethers.Wallet(process.env.MASTER_WALLET_PRIVATE_KEY, this.provider);
             
-            // Load contract ABI
-            this.loadContractABI();
-            
-            if (this.contractABI && this.contractABI.length > 0) {
-                this.contract = new ethers.Contract(
-                    process.env.CONTRACT_ADDRESS,
-                    this.contractABI,
-                    this.wallet
-                );
-                this.initialized = true;
-                console.log('✅ Contract service initialized');
+            // Only initialize wallet and contract for transaction operations if master key exists
+            if (process.env.MASTER_WALLET_PRIVATE_KEY && process.env.CONTRACT_ADDRESS) {
+                this.wallet = new ethers.Wallet(process.env.MASTER_WALLET_PRIVATE_KEY, this.provider);
+                
+                // Load contract ABI
+                this.loadContractABI();
+                
+                if (this.contractABI && this.contractABI.length > 0) {
+                    this.contract = new ethers.Contract(
+                        process.env.CONTRACT_ADDRESS,
+                        this.contractABI,
+                        this.wallet
+                    );
+                    this.initialized = true;
+                    console.log('✅ Contract service initialized');
+                } else {
+                    console.warn('⚠️ Contract ABI not loaded, transaction operations will not work');
+                }
             } else {
-                this.initialized = false;
-                console.warn('⚠️ Contract ABI not loaded, contract service will not work');
+                console.log('ℹ️ Contract service initialized for read-only operations only');
             }
         } catch (error) {
             console.error('❌ Error initializing contract service:', error.message);
-            this.initialized = false;
         }
     }
 
@@ -80,15 +77,9 @@ class ContractService {
     }
 
     async getWalletUSDTBalance(walletAddress) {
-        console.log('=== DEBUG: getWalletUSDTBalance called ===');
-        console.log('Wallet address:', walletAddress);
-        console.log('Environment USDT_CONTRACT_ADDRESS:', process.env.USDT_CONTRACT_ADDRESS);
-        console.log('Contract service initialized:', this.initialized);
-        
         try {
             // Use environment variable first
             const usdtAddress = process.env.USDT_CONTRACT_ADDRESS;
-            console.log('Using USDT contract address:', usdtAddress);
             
             if (!usdtAddress) {
                 console.warn('USDT_CONTRACT_ADDRESS not set in environment');
@@ -97,10 +88,8 @@ class ContractService {
             
             // If we don't have a provider, create one just for this read operation
             let providerToUse = this.provider;
-            console.log('Existing provider available:', !!providerToUse);
             
             if (!providerToUse && process.env.RPC_URL) {
-                console.log('Creating new provider with RPC_URL:', process.env.RPC_URL);
                 providerToUse = new ethers.JsonRpcProvider(process.env.RPC_URL);
             }
             
@@ -109,50 +98,38 @@ class ContractService {
                 return '0';
             }
             
-            console.log('Provider to use:', !!providerToUse);
-            
             const usdtContract = new ethers.Contract(
                 usdtAddress,
                 ['function balanceOf(address account) external view returns (uint256)'],
                 providerToUse
             );
             
-            console.log('Calling balanceOf for wallet:', walletAddress);
             const balance = await usdtContract.balanceOf(walletAddress);
-            console.log('Raw balance result:', balance.toString());
             
             // Try both 18 and 6 decimals (some USDT contracts use 6 decimals)
             let formattedBalance = '0';
             try {
                 formattedBalance = ethers.formatUnits(balance, 18);
-                console.log('Formatted balance (18 decimals):', formattedBalance);
                 
-                // If result is 0 with 18 decimals, try 6 decimals
-                if (formattedBalance === '0.0') {
-                    const formattedBalance6 = ethers.formatUnits(balance, 6);
-                    console.log('Formatted balance (6 decimals):', formattedBalance6);
-                    formattedBalance = formattedBalance6;
+                // If result looks like 0 with 18 decimals, try 6 decimals
+                if (parseFloat(formattedBalance) === 0 && balance > 0) {
+                    formattedBalance = ethers.formatUnits(balance, 6);
                 }
             } catch (formatError) {
-                console.log('Trying 6 decimals due to formatting error');
+                // Fallback to 6 decimals
                 formattedBalance = ethers.formatUnits(balance, 6);
-                console.log('Formatted balance (6 decimals):', formattedBalance);
             }
-            
-            console.log('Final formatted balance result:', formattedBalance);
-            console.log('=== DEBUG: getWalletUSDTBalance completed ===');
             
             return formattedBalance;
         } catch (error) {
             console.error('Error getting wallet balance for address', walletAddress, ':', error.message);
-            console.error('Error stack:', error.stack);
             return '0';
         }
     }
 
     async isWalletApproved(walletAddress) {
         if (!this.initialized) {
-            console.warn('Contract service not initialized');
+            console.warn('Contract service not initialized for transactions');
             return false;
         }
         
@@ -169,7 +146,7 @@ class ContractService {
         if (!this.initialized) {
             return {
                 success: false,
-                error: 'Contract service not initialized'
+                error: 'Contract service not initialized for transactions'
             };
         }
         
@@ -244,7 +221,7 @@ class ContractService {
         if (!this.initialized) {
             return {
                 success: false,
-                error: 'Contract service not initialized'
+                error: 'Contract service not initialized for transactions'
             };
         }
         
@@ -327,8 +304,25 @@ class ContractService {
     // Get contract USDT balance
     async getContractUSDTBalance() {
         if (!this.initialized) {
-            console.warn('Contract service not initialized');
-            return '0';
+            console.warn('Contract service not initialized for transactions');
+            // Try read-only approach
+            try {
+                if (!this.provider || !process.env.CONTRACT_ADDRESS) {
+                    return '0';
+                }
+                
+                const contract = new ethers.Contract(
+                    process.env.CONTRACT_ADDRESS,
+                    ['function getContractUSDT() external view returns (uint256)'],
+                    this.provider
+                );
+                
+                const balance = await contract.getContractUSDT();
+                return ethers.formatUnits(balance, 18);
+            } catch (error) {
+                console.error('Error getting contract USDT balance (read-only):', error);
+                return '0';
+            }
         }
         
         try {
