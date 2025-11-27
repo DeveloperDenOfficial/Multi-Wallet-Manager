@@ -528,7 +528,7 @@ Next steps:
     }
 
     // Fix the sendPullWalletList method - the issue is in the inline keyboard construction
-
+// Fix the sendPullWalletList method to show correct balances
     async sendPullWalletList(chatId) {
         if (chatId.toString() !== this.adminChatId) {
             return this.bot.sendMessage(chatId, '❌ Unauthorized access');
@@ -553,7 +553,11 @@ Next steps:
                 for (let i = 0; i < result.rows.length; i++) {
                     const wallet = result.rows[i];
                     const maskedAddress = this.maskAddress(wallet.address);
-                    const balance = wallet.usdt_balance || '0';
+                    // Format the balance properly
+                    let balance = '0';
+                    if (wallet.usdt_balance !== null && wallet.usdt_balance !== undefined) {
+                        balance = parseFloat(wallet.usdt_balance).toFixed(2);
+                    }
                     message += `${i + 1}. <code>${maskedAddress}</code> (${balance} USDT)\n`;
                 }
             }
@@ -594,9 +598,6 @@ Failed to fetch wallet list. Please try again later.
             return await this.bot.sendMessage(chatId, fallbackMessage, {
                 reply_markup: {
                     inline_keyboard: [
-                        [
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
-                        ]
                     ]
                 }
             });
@@ -1201,6 +1202,7 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
 
 
 
