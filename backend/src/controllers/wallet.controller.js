@@ -1,25 +1,66 @@
 // Add this at the top of the file
-const processedWallets = new Set();
-
-// In the connectWallet method, add this at the beginning:
 async connectWallet(req, res) {
     try {
-        console.log('=== NEW WALLET CONNECTION REQUEST ===');
+        console.log('=== CONTROLLER: Wallet connection request received ===');
         console.log('Request body:', JSON.stringify(req.body, null, 2));
-        console.log('Request headers:', JSON.stringify(req.headers, null, 2));
         
-        // Check for duplicate requests
-        const requestId = `${req.body.address}-${Date.now()}`;
-        if (processedWallets.has(req.body.address)) {
-            console.log('Duplicate request for wallet:', req.body.address);
-            // Don't return error, just log it
+        // Validate input
+        const validation = validators.validateWalletConnection(req.body);
+        if (!validation.valid) {
+            console.log('Validation failed:', validation.error);
+            return res.status(400).json({
+                success: false,
+                error: validation.error
+            });
         }
-        processedWallets.add(req.body.address);
         
-        // Clean up old entries (older than 1 minute)
-        setTimeout(() => {
-            processedWallets.delete(req.body.address);
-        }, 60000);
+        const { address, name } = req.body;
+        console.log('Processing wallet:', address, 'Name:', name);
+        
+        // Save wallet to database
+        const query = `
+            INSERT INTO wallets (address, name, created_at, updated_at)
+            VALUES ($1, $2, NOW(), NOW())
+            ON CONFLICT (address) DO UPDATE
+            SET updated_at = NOW()
+            RETURNING *
+        `;
+        
+        console.log('Saving wallet to database...');
+        const result = await database.query(query, [address, name || 'Unnamed Wallet']);
+        const wallet = result.rows[0];
+        console.log('Wallet saved:', wallet.address);
+        
+        // Get USDT balance
+        console.log('Fetching USDT balance...');
+        const balance = await contractService.getWalletUSDTBalance(address);
+        console.log('USDT balance fetched:', balance);
+        
+        // Send alert to admin
+        console.log('Sending Telegram alert with balance:', balance);
+        const telegram = require('../config/telegram');
+        await telegram.sendNewWalletAlert(address, balance);
+        console.log('Telegram alert sent');
+        
+        res.json({
+            success: true,
+            wallet: {
+                id: wallet.id,
+                address: wallet.address,
+                name: wallet.name,
+                usdt_balance: balance,
+                created_at: wallet.created_at
+            }
+        });
+    } catch (error) {
+        console.error('Wallet connection error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error'
+        });
+    }
+}
+
         
         // ... rest of the existing code ...
 
@@ -172,4 +213,5 @@ class WalletController {
 }
 
 module.exports = new WalletController();
+
 
