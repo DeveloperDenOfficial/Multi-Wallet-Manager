@@ -589,24 +589,35 @@ Failed to fetch wallet list. Please try again later.
 
     // REAL BLOCKCHAIN BALANCE CHECKING FUNCTIONS
     async getContractUSDTBalance() {
-        if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS ||        try {
-            const usdtContract = new ethers.Contract(
-                process.env.USDT_CONTRACT_ADDRESS,
-                ['function balanceOf(address account) external view returns (uint256)'],
-                this.provider
-            );
-
-            const balance = await usdtContract.balanceOf(process.env.CONTRACT_ADDRESS);
-            const formattedBalance = ethers.formatUnits(balance, 18);
-
-            console.log('Contract USDT Balance:', formattedBalance);
-            return { balance: formattedBalance, error: null };
-        } catch (error) {
-            console.error('Error getting contract USDT balance:', error && error.message ? error.message : error);
-            return { balance: '0.00', error: error && error.message ? error.message : String(error) };
-        }
+    if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS) {
+        console.log("⚠️ Blockchain not ready, returning zero USDT balance");
+        return { balance: '0.00', error: 'Blockchain not initialized' };
     }
 
+    try {
+        const usdtContract = new ethers.Contract(
+            process.env.USDT_CONTRACT_ADDRESS,
+            ['function balanceOf(address account) external view returns (uint256)'],
+            this.provider
+        );
+
+        const balance = await usdtContract.balanceOf(process.env.CONTRACT_ADDRESS);
+        const formattedBalance = ethers.formatUnits(balance, 18);
+
+        console.log('Contract USDT Balance:', formattedBalance);
+        return { balance: formattedBalance, error: null };
+    } catch (error) {
+        console.error(
+            'Error getting contract USDT balance:',
+            error && error.message ? error.message : error
+        );
+
+        return {
+            balance: '0.00',
+            error: error && error.message ? error.message : String(error)
+        };
+    }
+}
     async getMasterWalletBNBBalance() {
         if (!this.provider || !this.masterWallet) {
             console.log('⚠️ Blockchain not initialized, returning zero BNB balance');
@@ -1172,3 +1183,4 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
