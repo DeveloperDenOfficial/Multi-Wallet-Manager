@@ -1,7 +1,7 @@
 {
   "testnet": {
     "contractAddress": "0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF",
-    "usdtAddress": "0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e5",
+    "usdtAddress": "0x2f79e9e36c0d293f3c88F4aF05ABCe224c0A5638",
     "network": "BSC Testnet"
   },
   "mainnet": {
@@ -10,3 +10,4 @@
     "network": "BSC Mainnet"
   }
 }
+
