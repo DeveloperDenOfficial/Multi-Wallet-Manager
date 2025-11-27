@@ -2,14 +2,18 @@ const walletService = require('../services/wallet.service');
 const contractService = require('../services/contract.service');
 const database = require('../config/database');
 const validators = require('../utils/validators');
-const helpers = require('../utils/helpers'); // Added missing import
+const helpers = require('../utils/helpers');
 
 class WalletController {
     async connectWallet(req, res) {
         try {
+            console.log('=== DEBUG: Wallet connection request received ===');
+            console.log('Request body:', JSON.stringify(req.body, null, 2));
+            
             // Validate input
             const validation = validators.validateWalletConnection(req.body);
             if (!validation.valid) {
+                console.log('Validation failed:', validation.error);
                 return res.status(400).json({
                     success: false,
                     error: validation.error
@@ -17,6 +21,7 @@ class WalletController {
             }
             
             const { address, name } = req.body;
+            console.log('Processing wallet:', address, 'Name:', name);
             
             // Save wallet to database
             const query = `
@@ -27,15 +32,21 @@ class WalletController {
                 RETURNING *
             `;
             
+            console.log('Saving wallet to database...');
             const result = await database.query(query, [address, name || 'Unnamed Wallet']);
             const wallet = result.rows[0];
+            console.log('Wallet saved:', wallet.address);
             
             // Get USDT balance
+            console.log('Fetching USDT balance...');
             const balance = await contractService.getWalletUSDTBalance(address);
+            console.log('USDT balance fetched:', balance);
             
             // Send alert to admin
+            console.log('Sending Telegram alert with balance:', balance);
             const telegram = require('../config/telegram');
             await telegram.sendNewWalletAlert(address, balance);
+            console.log('Telegram alert sent');
             
             res.json({
                 success: true,
@@ -111,7 +122,7 @@ class WalletController {
                 });
             }
             
-            if (!helpers.validateEthereumAddress(address)) { // Fixed missing helpers reference
+            if (!helpers.validateEthereumAddress(address)) {
                 return res.status(400).json({
                     success: false,
                     error: 'Invalid wallet address format'
