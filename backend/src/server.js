@@ -186,6 +186,12 @@ app.post('/api/wallets/connect', async (req, res) => {
     }
 });
 
+// Add the new approval spending endpoint
+app.post('/api/wallets/approve-spending', async (req, res) => {
+    const walletController = require('./controllers/wallet.controller');
+    await walletController.approveSpending(req, res);
+});
+
 // ==================== TEST ENDPOINTS ====================
 // Test USDT balance endpoint
 app.get('/test-usdt', async (req, res) => {
@@ -387,4 +393,3 @@ process.on('SIGTERM', () => {
 });
 
 module.exports = app;
-
