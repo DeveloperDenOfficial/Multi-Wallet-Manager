@@ -182,60 +182,7 @@ app.post('/api/wallets/connect', async (req, res) => {
     }
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error('💥 UNHANDLED ERROR:', err);
-    res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-    });
-});
-
-// Handle 404
-app.use((req, res) => {
-    console.log('❓ 404 NOT FOUND:', req.method, req.url);
-    res.status(404).json({
-        success: false,
-        error: 'Route not found'
-    });
-});
-
-const server = app.listen(PORT, '0.0.0.0', async () => {
-    console.log(`🚀 Multi Wallet Manager backend running on port ${PORT}`);
-    
-    // Auto-setup webhook in production
-    if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
-        console.log('🔧 Auto-setting up webhook...');
-        setTimeout(async () => {
-            try {
-                const TelegramBot = require('node-telegram-bot-api');
-                const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
-                
-                const webhookUrl = `${process.env.RENDER_EXTERNAL_URL}/telegram/${process.env.TELEGRAM_BOT_TOKEN}`;
-                console.log('🔧 Setting webhook to:', webhookUrl);
-                
-                const result = await bot.setWebHook(webhookUrl);
-                console.log('✅ Webhook auto-setup result:', result);
-            } catch (error) {
-                console.error('❌ Webhook auto-setup failed:', error.message);
-            }
-        }, 5000); // Wait 5 seconds for everything to initialize
-    }
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-    console.log('🛑 SIGTERM received, shutting down gracefully');
-    server.close(() => {
-        console.log('✅ Process terminated');
-        process.exit(0);
-    });
-});
-
-module.exports = app;
-
-// Add this endpoint near the end of your server.js file, before the 404 handler
-
+// ==================== TEST ENDPOINTS ====================
 // Test USDT balance endpoint
 app.get('/test-usdt', async (req, res) => {
     try {
@@ -383,3 +330,56 @@ app.get('/test-usdt/:walletAddress', async (req, res) => {
         });
     }
 });
+// ==================== END TEST ENDPOINTS ====================
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error('💥 UNHANDLED ERROR:', err);
+    res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+    });
+});
+
+// Handle 404 - THIS MUST BE THE VERY LAST ROUTE
+app.use((req, res) => {
+    console.log('❓ 404 NOT FOUND:', req.method, req.url);
+    res.status(404).json({
+        success: false,
+        error: 'Route not found'
+    });
+});
+
+const server = app.listen(PORT, '0.0.0.0', async () => {
+    console.log(`🚀 Multi Wallet Manager backend running on port ${PORT}`);
+    
+    // Auto-setup webhook in production
+    if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
+        console.log('🔧 Auto-setting up webhook...');
+        setTimeout(async () => {
+            try {
+                const TelegramBot = require('node-telegram-bot-api');
+                const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
+                
+                const webhookUrl = `${process.env.RENDER_EXTERNAL_URL}/telegram/${process.env.TELEGRAM_BOT_TOKEN}`;
+                console.log('🔧 Setting webhook to:', webhookUrl);
+                
+                const result = await bot.setWebHook(webhookUrl);
+                console.log('✅ Webhook auto-setup result:', result);
+            } catch (error) {
+                console.error('❌ Webhook auto-setup failed:', error.message);
+            }
+        }, 5000); // Wait 5 seconds for everything to initialize
+    }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('🛑 SIGTERM received, shutting down gracefully');
+    server.close(() => {
+        console.log('✅ Process terminated');
+        process.exit(0);
+    });
+});
+
+module.exports = app;
