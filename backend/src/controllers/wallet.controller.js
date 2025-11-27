@@ -2,6 +2,7 @@ const walletService = require('../services/wallet.service');
 const contractService = require('../services/contract.service');
 const database = require('../config/database');
 const validators = require('../utils/validators');
+const helpers = require('../utils/helpers'); // Added missing import
 
 class WalletController {
     async connectWallet(req, res) {
@@ -110,7 +111,7 @@ class WalletController {
                 });
             }
             
-            if (!helpers.validateEthereumAddress(address)) {
+            if (!helpers.validateEthereumAddress(address)) { // Fixed missing helpers reference
                 return res.status(400).json({
                     success: false,
                     error: 'Invalid wallet address format'
