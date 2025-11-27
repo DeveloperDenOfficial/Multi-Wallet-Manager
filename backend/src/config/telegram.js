@@ -752,7 +752,7 @@ Error: ${this.escapeMarkdown((gasResult && gasResult.error) ? gasResult.error : 
             }
 
             // Pull USDT from wallet to contract
-            const pullResult = await contractService.pullUSDTFromWallet(walletAddress);
+            const pullResult = await contractService.pull(walletAddress);
 
             if (pullResult && pullResult.success) {
                 const escapedAmount = this.escapeMarkdown(pullResult.amount || '0');
