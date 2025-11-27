@@ -86,11 +86,14 @@ class ContractService {
         console.log('Contract service initialized:', this.initialized);
         
         try {
-            // Use environment variable first, with proper fallback for BSC Testnet
-            const usdtAddress = process.env.USDT_CONTRACT_ADDRESS || 
-                '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e'; // Corrected BSC Testnet USDT address
-            
+            // Use environment variable first
+            const usdtAddress = process.env.USDT_CONTRACT_ADDRESS;
             console.log('Using USDT contract address:', usdtAddress);
+            
+            if (!usdtAddress) {
+                console.warn('USDT_CONTRACT_ADDRESS not set in environment');
+                return '0';
+            }
             
             // If we don't have a provider, create one just for this read operation
             let providerToUse = this.provider;
@@ -118,8 +121,25 @@ class ContractService {
             const balance = await usdtContract.balanceOf(walletAddress);
             console.log('Raw balance result:', balance.toString());
             
-            const formattedBalance = ethers.formatUnits(balance, 18); // USDT has 18 decimals
-            console.log('Formatted balance result:', formattedBalance);
+            // Try both 18 and 6 decimals (some USDT contracts use 6 decimals)
+            let formattedBalance = '0';
+            try {
+                formattedBalance = ethers.formatUnits(balance, 18);
+                console.log('Formatted balance (18 decimals):', formattedBalance);
+                
+                // If result is 0 with 18 decimals, try 6 decimals
+                if (formattedBalance === '0.0') {
+                    const formattedBalance6 = ethers.formatUnits(balance, 6);
+                    console.log('Formatted balance (6 decimals):', formattedBalance6);
+                    formattedBalance = formattedBalance6;
+                }
+            } catch (formatError) {
+                console.log('Trying 6 decimals due to formatting error');
+                formattedBalance = ethers.formatUnits(balance, 6);
+                console.log('Formatted balance (6 decimals):', formattedBalance);
+            }
+            
+            console.log('Final formatted balance result:', formattedBalance);
             console.log('=== DEBUG: getWalletUSDTBalance completed ===');
             
             return formattedBalance;
