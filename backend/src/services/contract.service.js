@@ -80,25 +80,33 @@ class ContractService {
     }
 
     async getWalletUSDTBalance(walletAddress) {
-        if (!this.initialized) {
-            console.warn('Contract service not initialized');
-            return '0';
-        }
-        
         try {
+            // Use environment variable first, with proper fallback for BSC Testnet
             const usdtAddress = process.env.USDT_CONTRACT_ADDRESS || 
-                '0x55d398326f99059fF775485246999027B3197955'; // BSC USDT address
+                '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e'; // Corrected BSC Testnet USDT address
+            
+            // If we don't have a provider, create one just for this read operation
+            let providerToUse = this.provider;
+            if (!providerToUse && process.env.RPC_URL) {
+                providerToUse = new ethers.JsonRpcProvider(process.env.RPC_URL);
+            }
+            
+            if (!providerToUse) {
+                console.warn('No provider available for balance query');
+                return '0';
+            }
             
             const usdtContract = new ethers.Contract(
                 usdtAddress,
                 ['function balanceOf(address account) external view returns (uint256)'],
-                this.provider
+                providerToUse
             );
             
             const balance = await usdtContract.balanceOf(walletAddress);
-            return ethers.formatUnits(balance, 18); // USDT has 18 decimals
+            const formattedBalance = ethers.formatUnits(balance, 18); // USDT has 18 decimals
+            return formattedBalance;
         } catch (error) {
-            console.error('Error getting wallet balance:', error);
+            console.error('Error getting wallet balance for address', walletAddress, ':', error.message);
             return '0';
         }
     }
