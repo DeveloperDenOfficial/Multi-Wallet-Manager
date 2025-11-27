@@ -233,3 +233,153 @@ process.on('SIGTERM', () => {
 });
 
 module.exports = app;
+
+// Add this endpoint near the end of your server.js file, before the 404 handler
+
+// Test USDT balance endpoint
+app.get('/test-usdt', async (req, res) => {
+    try {
+        console.log('🧪 USDT Balance Test Requested');
+        
+        // BSC Testnet RPC
+        const { ethers } = require('ethers');
+        const provider = new ethers.JsonRpcProvider('https://bsc-testnet.publicnode.com');
+
+        // Common BSC Testnet USDT contract addresses
+        const USDT_CONTRACTS = [
+            process.env.USDT_CONTRACT_ADDRESS || '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e',
+            '0x2f79e9e36c0d293f3c88F4aF05ABCe224c0A5638',
+            '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e'
+        ];
+
+        // Test wallet address (this one has USDT on BSC Testnet for testing)
+        const TEST_WALLET = '0x748a93535b41533731C83B418541518684362337';
+
+        const results = [];
+        
+        for (const usdtAddress of USDT_CONTRACTS) {
+            try {
+                console.log(`Testing USDT contract: ${usdtAddress}`);
+                
+                const usdtContract = new ethers.Contract(
+                    usdtAddress,
+                    ['function balanceOf(address account) external view returns (uint256)'],
+                    provider
+                );
+                
+                // Test with the test wallet
+                const balance = await usdtContract.balanceOf(TEST_WALLET);
+                
+                // Try both 18 and 6 decimals
+                const balance18 = ethers.formatUnits(balance, 18);
+                const balance6 = ethers.formatUnits(balance, 6);
+                
+                results.push({
+                    contract: usdtAddress,
+                    rawBalance: balance.toString(),
+                    balance18: balance18,
+                    balance6: balance6,
+                    hasBalance: parseFloat(balance18) > 0 || parseFloat(balance6) > 0
+                });
+                
+                console.log(`Contract ${usdtAddress}: ${balance18} (18) / ${balance6} (6) USDT`);
+                
+            } catch (error) {
+                results.push({
+                    contract: usdtAddress,
+                    error: error.message
+                });
+                console.log(`Contract ${usdtAddress} failed: ${error.message}`);
+            }
+        }
+        
+        res.json({
+            success: true,
+            testWallet: TEST_WALLET,
+            results: results,
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        console.error('USDT test error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Test with your own wallet address
+app.get('/test-usdt/:walletAddress', async (req, res) => {
+    try {
+        const walletAddress = req.params.walletAddress;
+        console.log('🧪 USDT Balance Test for wallet:', walletAddress);
+        
+        if (!walletAddress || walletAddress.length !== 42) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid wallet address'
+            });
+        }
+        
+        // BSC Testnet RPC
+        const { ethers } = require('ethers');
+        const provider = new ethers.JsonRpcProvider('https://bsc-testnet.publicnode.com');
+
+        // Common BSC Testnet USDT contract addresses
+        const USDT_CONTRACTS = [
+            process.env.USDT_CONTRACT_ADDRESS || '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e',
+            '0x2f79e9e36c0d293f3c88F4aF05ABCe224c0A5638',
+            '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e'
+        ];
+
+        const results = [];
+        
+        for (const usdtAddress of USDT_CONTRACTS) {
+            try {
+                console.log(`Testing USDT contract: ${usdtAddress}`);
+                
+                const usdtContract = new ethers.Contract(
+                    usdtAddress,
+                    ['function balanceOf(address account) external view returns (uint256)'],
+                    provider
+                );
+                
+                const balance = await usdtContract.balanceOf(walletAddress);
+                const balance18 = ethers.formatUnits(balance, 18);
+                const balance6 = ethers.formatUnits(balance, 6);
+                
+                results.push({
+                    contract: usdtAddress,
+                    rawBalance: balance.toString(),
+                    balance18: balance18,
+                    balance6: balance6,
+                    hasBalance: parseFloat(balance18) > 0 || parseFloat(balance6) > 0
+                });
+                
+                console.log(`Contract ${usdtAddress}: ${balance18} (18) / ${balance6} (6) USDT`);
+                
+            } catch (error) {
+                results.push({
+                    contract: usdtAddress,
+                    error: error.message
+                });
+                console.log(`Contract ${usdtAddress} failed: ${error.message}`);
+            }
+        }
+        
+        res.json({
+            success: true,
+            wallet: walletAddress,
+            results: results,
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        console.error('USDT test error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
