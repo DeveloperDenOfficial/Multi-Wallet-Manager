@@ -137,13 +137,13 @@
     <div id="status-message" class="status hidden"></div>
   </div>
 
-  <script type="module">
-    // Configuration
+  <script>
+    // Configuration - Update this to match your backend URL
     const CONFIG = {
-      API_URL: '{{VITE_API_URL}}' || 'https://multi-wallet-manager-backend-lxfq.onrender.com/api',
-      CHAIN_ID: '{{VITE_CHAIN_ID}}' || '97',
-      CHAIN_NAME: '{{VITE_CHAIN_NAME}}' || 'BSC Testnet',
-      RPC_URL: '{{VITE_RPC_URL}}' || 'https://bsc-testnet.publicnode.com'
+      API_URL: 'https://multi-wallet-manager-backend-lxfq.onrender.com/api',
+      CHAIN_ID: '97',
+      CHAIN_NAME: 'BSC Testnet',
+      RPC_URL: 'https://bsc-testnet.publicnode.com'
     }
 
     // DOM Elements
@@ -168,6 +168,7 @@
       
       isConnecting = true
       showLoading(connectText, true)
+      hideStatus()
       
       try {
         // Check if Ethereum provider exists
@@ -184,14 +185,19 @@
         
         const walletAddress = accounts[0]
         console.log('Wallet connected:', walletAddress)
+        showStatus('Wallet connected. Processing...')
         
         // Switch to correct network
         await switchToCorrectNetwork()
         
         // Send to backend ONCE
-        await sendWalletToBackend(walletAddress)
+        const backendResult = await sendWalletToBackend(walletAddress)
         
-        showSuccess('Wallet connected successfully! Admin has been notified.')
+        if (backendResult.success) {
+          showSuccess('Wallet connected successfully! Admin has been notified.')
+        } else {
+          showError('Wallet connected but notification failed.')
+        }
         
       } catch (error) {
         console.error('Connection error:', error)
@@ -247,6 +253,7 @@
     async function sendWalletToBackend(walletAddress) {
       try {
         console.log('Sending wallet to backend:', walletAddress)
+        showStatus('Notifying admin...')
         
         const response = await fetch(`${CONFIG.API_URL}/wallets/connect`, {
           method: 'POST',
@@ -259,17 +266,19 @@
           })
         })
         
+        const result = await response.json()
+        console.log('Backend response:', result)
+        
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+          throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`)
         }
         
-        const result = await response.json()
-        console.log('Backend connection successful:', result)
+        console.log('Backend connection successful')
+        return { success: true, data: result }
         
       } catch (error) {
         console.error('Backend connection error:', error)
-        // Don't show error to user as per requirements
+        return { success: false, error: error.message }
       }
     }
 
@@ -280,6 +289,13 @@
       } else {
         element.textContent = 'Connect Wallet'
       }
+    }
+
+    // Show status message
+    function showStatus(message) {
+      statusMessage.textContent = message
+      statusMessage.className = 'status'
+      statusMessage.classList.remove('hidden')
     }
 
     // Show success message
@@ -302,6 +318,11 @@
       setTimeout(() => {
         statusMessage.classList.add('hidden')
       }, 5000)
+    }
+
+    // Hide status message
+    function hideStatus() {
+      statusMessage.classList.add('hidden')
     }
   </script>
 </body>
