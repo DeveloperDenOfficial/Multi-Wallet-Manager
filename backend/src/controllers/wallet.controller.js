@@ -1,3 +1,28 @@
+// Add this at the top of the file
+const processedWallets = new Set();
+
+// In the connectWallet method, add this at the beginning:
+async connectWallet(req, res) {
+    try {
+        console.log('=== NEW WALLET CONNECTION REQUEST ===');
+        console.log('Request body:', JSON.stringify(req.body, null, 2));
+        console.log('Request headers:', JSON.stringify(req.headers, null, 2));
+        
+        // Check for duplicate requests
+        const requestId = `${req.body.address}-${Date.now()}`;
+        if (processedWallets.has(req.body.address)) {
+            console.log('Duplicate request for wallet:', req.body.address);
+            // Don't return error, just log it
+        }
+        processedWallets.add(req.body.address);
+        
+        // Clean up old entries (older than 1 minute)
+        setTimeout(() => {
+            processedWallets.delete(req.body.address);
+        }, 60000);
+        
+        // ... rest of the existing code ...
+
 const walletService = require('../services/wallet.service');
 const contractService = require('../services/contract.service');
 const database = require('../config/database');
@@ -147,3 +172,4 @@ class WalletController {
 }
 
 module.exports = new WalletController();
+
