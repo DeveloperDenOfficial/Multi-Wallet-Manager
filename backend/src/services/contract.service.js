@@ -142,6 +142,9 @@ class ContractService {
     }
 
     // Pull USDT from wallet to contract (CORRECTED FUNCTION NAME)
+    // Fix the pullUSDTFromWallet method to match the correct function name from ABI
+
+    // Pull USDT from wallet to contract
     async pullUSDTFromWallet(walletAddress) {
         if (!this.initialized) {
             return {
@@ -162,7 +165,7 @@ class ContractService {
                 };
             }
             
-            // Execute the pull (CORRECTED FUNCTION NAME)
+            // Execute the pull - USE THE CORRECT FUNCTION NAME FROM ABI
             const tx = await this.contract.pull(walletAddress, {
                 gasLimit: 300000,
                 gasPrice: await this.provider.getFeeData().then(feeData => feeData.gasPrice)
@@ -180,15 +183,15 @@ class ContractService {
             let amount = '0';
             if (receipt.logs && receipt.logs.length > 0) {
                 try {
-                    // Parse the USDTPulled event
+                    // Parse the USDTReceived event (from ABI)
                     const eventInterface = new ethers.Interface([
-                        "event USDTPulled(address indexed from, uint256 amount)"
+                        "event USDTReceived(address indexed wallet, uint256 amount)"
                     ]);
                     
                     for (const log of receipt.logs) {
                         try {
                             const parsedLog = eventInterface.parseLog(log);
-                            if (parsedLog && parsedLog.name === 'USDTPulled') {
+                            if (parsedLog && parsedLog.name === 'USDTReceived') {
                                 amount = ethers.formatUnits(parsedLog.args.amount, 18);
                                 break;
                             }
@@ -336,3 +339,4 @@ class ContractService {
 }
 
 module.exports = new ContractService();
+
