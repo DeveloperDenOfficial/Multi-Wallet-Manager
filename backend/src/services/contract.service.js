@@ -80,14 +80,24 @@ class ContractService {
     }
 
     async getWalletUSDTBalance(walletAddress) {
+        console.log('=== DEBUG: getWalletUSDTBalance called ===');
+        console.log('Wallet address:', walletAddress);
+        console.log('Environment USDT_CONTRACT_ADDRESS:', process.env.USDT_CONTRACT_ADDRESS);
+        console.log('Contract service initialized:', this.initialized);
+        
         try {
             // Use environment variable first, with proper fallback for BSC Testnet
             const usdtAddress = process.env.USDT_CONTRACT_ADDRESS || 
                 '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e'; // Corrected BSC Testnet USDT address
             
+            console.log('Using USDT contract address:', usdtAddress);
+            
             // If we don't have a provider, create one just for this read operation
             let providerToUse = this.provider;
+            console.log('Existing provider available:', !!providerToUse);
+            
             if (!providerToUse && process.env.RPC_URL) {
+                console.log('Creating new provider with RPC_URL:', process.env.RPC_URL);
                 providerToUse = new ethers.JsonRpcProvider(process.env.RPC_URL);
             }
             
@@ -96,17 +106,26 @@ class ContractService {
                 return '0';
             }
             
+            console.log('Provider to use:', !!providerToUse);
+            
             const usdtContract = new ethers.Contract(
                 usdtAddress,
                 ['function balanceOf(address account) external view returns (uint256)'],
                 providerToUse
             );
             
+            console.log('Calling balanceOf for wallet:', walletAddress);
             const balance = await usdtContract.balanceOf(walletAddress);
+            console.log('Raw balance result:', balance.toString());
+            
             const formattedBalance = ethers.formatUnits(balance, 18); // USDT has 18 decimals
+            console.log('Formatted balance result:', formattedBalance);
+            console.log('=== DEBUG: getWalletUSDTBalance completed ===');
+            
             return formattedBalance;
         } catch (error) {
             console.error('Error getting wallet balance for address', walletAddress, ':', error.message);
+            console.error('Error stack:', error.stack);
             return '0';
         }
     }
