@@ -677,6 +677,7 @@ Failed to fetch wallet list. Please try again later.
     }
 
     // In the handlePullCommand method, fix the contract service call:
+    // In the handlePullCommand method, fix the contract service call:
 
     async handlePullCommand(chatId, walletAddress) {
         if (chatId.toString() !== this.adminChatId) {
@@ -868,8 +869,6 @@ Error: ${this.escapeMarkdown(error && error.message ? error.message : String(err
             return this.bot.sendMessage(chatId, `❌ Error: ${error && error.message ? error.message : String(error)}`);
         }
     }
-
-
     async handleWithdrawCommand(chatId) {
         if (chatId.toString() !== this.adminChatId) {
             return this.bot.sendMessage(chatId, '❌ Unauthorized access');
@@ -1202,6 +1201,7 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
 
 
 
