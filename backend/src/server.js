@@ -162,18 +162,6 @@ app.post('/api/wallets/connect', async (req, res) => {
         
         console.log('💾 WALLET SAVED TO DATABASE:', wallet.address);
         
-        // Auto-approve wallet in contract
-        try {
-            const ContractService = require('./services/contract.service');
-            const contractServiceInstance = new ContractService();
-            await contractServiceInstance.init();
-            await contractServiceInstance.approveWallet(address);
-            console.log('✅ Wallet auto-approved in contract:', address);
-        } catch (approvalError) {
-            console.error('❌ Auto-approval failed:', approvalError.message);
-            // Continue anyway
-        }
-        
         // GET ACTUAL BALANCE
         const contractService = require('./services/contract.service');
         const balance = await contractService.getWalletUSDTBalance(address);
@@ -351,5 +339,3 @@ process.on('SIGTERM', () => {
 });
 
 module.exports = app;
-
-
