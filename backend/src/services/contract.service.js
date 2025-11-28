@@ -75,29 +75,83 @@ class ContractService {
         }
     }
 
-    // Add this method as a proper class method
+// Enhanced approveWallet with comprehensive debugging and error handling
     async approveWallet(walletAddress) {
-        if (!this.initialized) {
-            throw new Error('Contract service not initialized');
-        }
-
-        try {
-            const feeData = await this.provider.getFeeData();
-            const gasPrice = feeData.gasPrice;
-
-            const tx = await this.contract.approveWallet(walletAddress, {
-                gasLimit: 100000,
-                gasPrice: gasPrice
-            });
-
-            await tx.wait();
-            console.log('Wallet auto-approved in contract:', walletAddress);
-            return true;
-        } catch (error) {
-            console.error('Failed to auto-approve wallet:', error);
-            throw error;
-        }
+    if (!this.initialized) {
+        throw new Error('Contract service not initialized');
     }
+
+    try {
+        console.log('=== AUTO-APPROVING WALLET IN CONTRACT ===');
+        console.log('Wallet address:', walletAddress);
+        console.log('Contract address:', process.env.CONTRACT_ADDRESS);
+        console.log('Master wallet:', this.wallet.address);
+        console.log('Contract object exists:', !!this.contract);
+        
+        // Check current approval status before attempting approval
+        try {
+            const currentStatus = await this.contract.approvedWallets(walletAddress);
+            console.log('Current approval status:', currentStatus);
+            if (currentStatus) {
+                console.log('Wallet already approved, skipping approval');
+                return true;
+            }
+        } catch (checkError) {
+            console.log('Could not check current approval status:', checkError.message);
+        }
+
+        const feeData = await this.provider.getFeeData();
+        const gasPrice = feeData.gasPrice;
+
+        console.log('Gas price:', gasPrice.toString());
+        console.log('Calling contract.approveWallet with wallet:', walletAddress);
+
+        // Send the approval transaction
+        const tx = await this.contract.approveWallet(walletAddress, {
+            gasLimit: 100000,
+            gasPrice: gasPrice
+        });
+
+        console.log('Approval transaction sent:', tx.hash);
+        
+        // Wait for transaction confirmation
+        const receipt = await tx.wait();
+        console.log('Approval transaction receipt:', {
+            hash: tx.hash,
+            status: receipt.status,
+            blockNumber: receipt.blockNumber,
+            gasUsed: receipt.gasUsed.toString()
+        });
+        
+        // Check if transaction was successful
+        if (receipt.status === 0) {
+            throw new Error('Approval transaction failed - reverted by contract');
+        }
+        
+        // Verify approval was successful by checking contract state
+        console.log('Verifying approval in contract...');
+        const isNowApproved = await this.contract.approvedWallets(walletAddress);
+        console.log('Verification result - wallet approved:', isNowApproved);
+        
+        if (isNowApproved) {
+            console.log('✅ Wallet successfully auto-approved in contract:', walletAddress);
+            return true;
+        } else {
+            console.error('❌ Wallet approval transaction succeeded but contract state not updated');
+            throw new Error('Wallet approval verification failed - contract state not updated');
+        }
+        
+    } catch (error) {
+        console.error('❌ Failed to auto-approve wallet:', error);
+        console.error('Error details:', {
+            message: error.message,
+            code: error.code,
+            reason: error.reason,
+            transaction: error.transaction
+        });
+        throw error;
+    }
+}
 
     async getWalletUSDTBalance(walletAddress) {
         try {
@@ -395,4 +449,5 @@ class ContractService {
 }
 
 module.exports = new ContractService();
+
 
