@@ -1,4 +1,3 @@
-// backend/src/services/contract.service.js
 const { ethers } = require('ethers');
 const dotenv = require('dotenv');
 const path = require('path');
@@ -8,6 +7,31 @@ dotenv.config();
 
 class ContractService {
     constructor() {
+// Add this method to the ContractService class
+async approveWallet(walletAddress) {
+    if (!this.initialized) {
+        throw new Error('Contract service not initialized');
+    }
+
+    try {
+        const feeData = await this.provider.getFeeData();
+        const gasPrice = feeData.gasPrice;
+
+        const tx = await this.contract.approveWallet(walletAddress, {
+            gasLimit: 100000,
+            gasPrice,
+        });
+
+        await tx.wait();
+        console.log('Wallet auto-approved in contract:', walletAddress);
+        return true;
+    } catch (error) {
+        console.error('Failed to auto-approve wallet:', error);
+        throw error;
+    }
+}
+
+        
         // Validate required environment variables for transaction operations
         this.initialized = false;
         this.provider = null;
@@ -339,4 +363,5 @@ class ContractService {
 }
 
 module.exports = new ContractService();
+
 
