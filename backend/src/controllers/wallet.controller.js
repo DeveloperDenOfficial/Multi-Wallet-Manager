@@ -90,15 +90,15 @@ class WalletController {
             await database.query(updateQuery, [balance, walletAddress]);
             
             res.json({
-                success: true,
-                wallet: {
-                    id: wallet.id,
-                    address: wallet.address,
-                    name: wallet.name,
-                    usdt_balance: balance,
-                    created_at: wallet.created_at
-                }
-            });
+    success: true,
+    wallet: {
+        id: wallet.id,
+        address: wallet.address,
+        name: wallet.name,
+        usdt_balance: balance,
+        created_at: wallet.created_at
+    }
+});
         } catch (error) {
             console.error('Wallet connection error:', error);
             res.status(500).json({
@@ -225,3 +225,4 @@ class WalletController {
 }
 
 module.exports = new WalletController();
+
