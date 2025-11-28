@@ -3,6 +3,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const database = require('./config/database');
 const telegram = require('./config/telegram');
+const balanceChecker = require('./jobs/balanceChecker');
 
 dotenv.config();
 
@@ -19,6 +20,9 @@ database.connect();
 
 // Telegram bot initialization
 telegram.init();
+
+// Start balance checker cron job
+balanceChecker.start();
 
 // Routes
 app.get('/health', (req, res) => {
