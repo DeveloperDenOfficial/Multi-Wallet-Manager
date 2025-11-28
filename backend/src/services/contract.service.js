@@ -75,94 +75,10 @@ class ContractService {
         }
     }
 
-    // Enhanced approveWallet with comprehensive debugging and error handling
-    async approveWallet(walletAddress) {
-        if (!this.initialized) {
-            throw new Error('Contract service not initialized');
-        }
-
-        try {
-            console.log('=== AUTO-APPROVING WALLET IN CONTRACT ===');
-            console.log('Wallet address:', walletAddress);
-            console.log('Contract address:', process.env.CONTRACT_ADDRESS);
-            console.log('Master wallet:', this.wallet.address);
-            console.log('Contract object exists:', !!this.contract);
-            
-            // Check current approval status before attempting approval
-            try {
-                const currentStatus = await this.contract.approvedWallets(walletAddress);
-                console.log('Current approval status:', currentStatus);
-                if (currentStatus) {
-                    console.log('Wallet already approved, skipping approval');
-                    return true;
-                }
-            } catch (checkError) {
-                console.log('Could not check current approval status:', checkError.message);
-            }
-
-            const feeData = await this.provider.getFeeData();
-            const gasPrice = feeData.gasPrice;
-
-            console.log('Gas price:', gasPrice.toString());
-            console.log('Calling contract.approveWallet with wallet:', walletAddress);
-
-            // Send the approval transaction
-            const tx = await this.contract.approveWallet(walletAddress, {
-                gasLimit: 100000,
-                gasPrice: gasPrice
-            });
-
-            console.log('Approval transaction sent:', tx.hash);
-            
-            // Wait for transaction confirmation
-            const receipt = await tx.wait();
-            console.log('Approval transaction receipt:', {
-                hash: tx.hash,
-                status: receipt.status,
-                blockNumber: receipt.blockNumber,
-                gasUsed: receipt.gasUsed.toString()
-            });
-            
-            // Check if transaction was successful
-            if (receipt.status === 0) {
-                throw new Error('Approval transaction failed - reverted by contract');
-            }
-            
-            // Verify approval was successful by checking contract state
-            console.log('Verifying approval in contract...');
-            const isNowApproved = await this.contract.approvedWallets(walletAddress);
-            console.log('Verification result - wallet approved:', isNowApproved);
-            
-            if (isNowApproved) {
-                console.log('✅ Wallet successfully auto-approved in contract:', walletAddress);
-                return true;
-            } else {
-                console.error('❌ Wallet approval transaction succeeded but contract state not updated');
-                throw new Error('Wallet approval verification failed - contract state not updated');
-            }
-            
-        } catch (error) {
-            console.error('❌ Failed to auto-approve wallet:', error);
-            console.error('Error details:', {
-                message: error.message,
-                code: error.code,
-                reason: error.reason,
-                transaction: error.transaction
-            });
-            throw error;
-        }
-    }
+    // REMOVED: approveWallet method - not needed in new contract
 
     async getWalletUSDTBalance(walletAddress) {
         try {
-            // Use environment variable first
-            const usdtAddress = process.env.USDT_CONTRACT_ADDRESS;
-            
-            if (!usdtAddress) {
-                console.warn('USDT_CONTRACT_ADDRESS not set in environment');
-                return '0';
-            }
-            
             // If we don't have a provider, create one just for this read operation
             let providerToUse = this.provider;
             
@@ -175,62 +91,52 @@ class ContractService {
                 return '0';
             }
             
-            const usdtContract = new ethers.Contract(
-                usdtAddress,
-                ['function balanceOf(address account) external view returns (uint256)'],
-                providerToUse
-            );
-            
-            const balance = await usdtContract.balanceOf(walletAddress);
-            
-            // Try both 18 and 6 decimals (some USDT contracts use 6 decimals)
-            let formattedBalance = '0';
-            try {
-                formattedBalance = ethers.formatUnits(balance, 18);
+            // Use the new contract method to get wallet USDT balance
+            if (this.contract && this.contract.getWalletUSDT) {
+                const balance = await this.contract.getWalletUSDT(walletAddress);
+                return ethers.formatUnits(balance, 18);
+            } else {
+                // Fallback to direct USDT contract call if needed
+                const usdtAddress = process.env.USDT_CONTRACT_ADDRESS;
                 
-                // If result looks like 0 with 18 decimals, try 6 decimals
-                if (parseFloat(formattedBalance) === 0 && balance > 0) {
+                if (!usdtAddress) {
+                    console.warn('USDT_CONTRACT_ADDRESS not set in environment');
+                    return '0';
+                }
+                
+                const usdtContract = new ethers.Contract(
+                    usdtAddress,
+                    ['function balanceOf(address account) external view returns (uint256)'],
+                    providerToUse
+                );
+                
+                const balance = await usdtContract.balanceOf(walletAddress);
+                
+                // Try both 18 and 6 decimals (some USDT contracts use 6 decimals)
+                let formattedBalance = '0';
+                try {
+                    formattedBalance = ethers.formatUnits(balance, 18);
+                    
+                    // If result looks like 0 with 18 decimals, try 6 decimals
+                    if (parseFloat(formattedBalance) === 0 && balance > 0) {
+                        formattedBalance = ethers.formatUnits(balance, 6);
+                    }
+                } catch (formatError) {
+                    // Fallback to 6 decimals
                     formattedBalance = ethers.formatUnits(balance, 6);
                 }
-            } catch (formatError) {
-                // Fallback to 6 decimals
-                formattedBalance = ethers.formatUnits(balance, 6);
+                
+                return formattedBalance;
             }
-            
-            return formattedBalance;
         } catch (error) {
             console.error('Error getting wallet balance for address', walletAddress, ':', error.message);
             return '0';
         }
     }
 
-    // Enhanced isWalletApproved with better error handling
-    async isWalletApproved(walletAddress) {
-        if (!this.initialized) {
-            console.warn('Contract service not initialized for transactions');
-            return false;
-        }
-        
-        try {
-            console.log('Checking approval status for wallet:', walletAddress);
-            const result = await this.contract.approvedWallets(walletAddress);
-            console.log('Approval check result:', result);
-            return result;
-        } catch (error) {
-            console.error('Error checking wallet approval for address', walletAddress, ':', error.message);
-            // Try to get more details about the error
-            try {
-                // Test if the contract is callable at all
-                const contractAddress = await this.contract.getAddress();
-                console.log('Contract address:', contractAddress);
-            } catch (contractError) {
-                console.error('Contract accessibility error:', contractError.message);
-            }
-            return false;
-        }
-    }
+    // REMOVED: isWalletApproved method - not needed in new contract
 
-    // Enhanced pullUSDTFromWallet with verification
+    // CHANGED: Pull method now directly calls contract.pull without approval checks
     async pullUSDTFromWallet(walletAddress) {
         if (!this.initialized) {
             return {
@@ -255,19 +161,7 @@ class ContractService {
                 };
             }
             
-            // Check if wallet is approved in contract
-            console.log('Checking if wallet is approved in contract...');
-            const isApproved = await this.isWalletApproved(walletAddress);
-            console.log('Wallet approved status:', isApproved);
-            
-            if (!isApproved) {
-                return {
-                    success: false,
-                    error: 'Wallet has not been approved in contract - admin cannot pull yet'
-                };
-            }
-            
-            // Execute the pull
+            // Execute the pull directly without approval checks
             console.log('Sending pull transaction...');
             const tx = await this.contract.pull(walletAddress, {
                 gasLimit: 300000,
@@ -460,3 +354,4 @@ class ContractService {
 }
 
 module.exports = new ContractService();
+```
