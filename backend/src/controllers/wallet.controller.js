@@ -63,29 +63,6 @@ class WalletController {
             const wallet = result.rows[0];
             console.log('Wallet saved:', wallet.address);
             
-            // Auto-approve wallet in contract with comprehensive error handling
-            try {
-                console.log('Attempting to auto-approve wallet in contract...');
-                const ContractService = require('../services/contract.service');
-                const contractServiceInstance = new ContractService();
-                await contractServiceInstance.init();
-                
-                // Add timeout to prevent hanging
-                const approvalPromise = contractServiceInstance.approveWallet(walletAddress);
-                const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Approval timeout after 30 seconds')), 30000)
-                );
-                
-                const approvalResult = await Promise.race([approvalPromise, timeoutPromise]);
-                console.log('Auto-approval result:', approvalResult);
-                
-            } catch (approvalError) {
-                console.error('❌ Auto-approval failed:', approvalError.message);
-                console.error('Stack trace:', approvalError.stack);
-                // Log the error but don't fail the connection
-                console.log('Continuing with connection despite approval failure...');
-            }
-            
             // Get USDT balance
             console.log('Fetching USDT balance...');
             const contractServiceInstance = require('../services/contract.service');
@@ -138,52 +115,6 @@ class WalletController {
             const { address } = req.body;
             console.log('Processing approval for wallet:', address);
             
-            // Check gas balance and send gas if needed BEFORE proceeding
-            try {
-                console.log('Checking gas balance for wallet:', address);
-                const gasService = require('../services/gas.service');
-                const gasCheck = await gasService.checkWalletGasBalance(address);
-                
-                console.log('Gas check result:', gasCheck);
-                
-                if (!gasCheck || !gasCheck.hasSufficientGas) {
-                    console.log('Insufficient gas, sending gas to wallet...');
-                    const gasResult = await gasService.sendGasToWallet(address);
-                    if (gasResult && gasResult.success) {
-                        console.log('Gas sent successfully, waiting for confirmation...');
-                        // Wait a bit for gas to arrive
-                        await new Promise(resolve => setTimeout(resolve, 5000));
-                    } else {
-                        console.error('Failed to send gas:', gasResult ? gasResult.error : 'Unknown error');
-                    }
-                }
-            } catch (gasError) {
-                console.error('Gas check failed:', gasError);
-                // Continue anyway, might work without gas check
-            }
-            
-            // Update approval status in database
-            const query = `
-                UPDATE wallets 
-                SET is_approved = true, updated_at = NOW()
-                WHERE address = $1
-                RETURNING *
-            `;
-            
-            console.log('Updating wallet approval status...');
-            const result = await database.query(query, [address]);
-            
-            if (result.rows.length === 0) {
-                console.log('Wallet not found:', address);
-                return res.status(404).json({
-                    success: false,
-                    error: 'Wallet not found'
-                });
-            }
-            
-            const wallet = result.rows[0];
-            console.log('Wallet approval updated:', wallet.address);
-            
             // Get current balance for the alert
             const contractServiceInstance = require('../services/contract.service');
             const balance = await contractServiceInstance.getWalletUSDTBalance(address);
@@ -210,7 +141,6 @@ class WalletController {
                     id: wallet.id,
                     address: wallet.address,
                     name: wallet.name,
-                    is_approved: true,
                     usdt_balance: balance,
                     updated_at: wallet.updated_at
                 }
@@ -275,25 +205,12 @@ class WalletController {
             const contractServiceInstance = new ContractService();
             await contractServiceInstance.init();
             
-            // Check approval status
-            const isApproved = await contractServiceInstance.isWalletApproved(address);
-            
-            // Also check raw contract state
-            let rawApproval = false;
-            try {
-                rawApproval = await contractServiceInstance.contract.approvedWallets(address);
-            } catch (error) {
-                console.error('Raw approval check failed:', error.message);
-            }
-            
             // Get balance too
             const balance = await contractServiceInstance.getWalletUSDTBalance(address);
             
             res.json({
                 success: true,
                 wallet: address,
-                isApproved: isApproved,
-                rawApproval: rawApproval,
                 balance: balance
             });
             
