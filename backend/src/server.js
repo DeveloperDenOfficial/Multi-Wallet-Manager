@@ -218,7 +218,6 @@ app.get('/debug/approval/:walletAddress', async (req, res) => {
 });
 
 // ==================== TEST ENDPOINTS ====================
-// Test USDT balance endpoint
 app.get('/test-usdt', async (req, res) => {
     try {
         console.log('🧪 USDT Balance Test Requested');
@@ -227,15 +226,13 @@ app.get('/test-usdt', async (req, res) => {
         const { ethers } = require('ethers');
         const provider = new ethers.JsonRpcProvider('https://bsc-testnet.publicnode.com');
 
-        // Common BSC Testnet USDT contract addresses
+        // YOUR ACTUAL BSC Testnet USDT contract address
         const USDT_CONTRACTS = [
-            process.env.USDT_CONTRACT_ADDRESS || '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e',
-            '0x2f79e9e36c0d293f3c88F4aF05ABCe224c0A5638',
-            '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e'
+            process.env.USDT_CONTRACT_ADDRESS || '0x2f79e9e36c0d293f3c88F4aF05ABCe224c0A5638',
         ];
 
-        // Test wallet address (this one has USDT on BSC Testnet for testing)
-        const TEST_WALLET = '0x748a93535b41533731C83B418541518684362337';
+        // Use one of your actual test wallets or remove this test
+        const TEST_WALLET = '0xac797f0792f90cf1a70ef70ea1448d7b4f52bc8b'; // Your actual wallet
 
         const results = [];
         
@@ -249,22 +246,20 @@ app.get('/test-usdt', async (req, res) => {
                     provider
                 );
                 
-                // Test with the test wallet
+                // Test with your actual wallet
                 const balance = await usdtContract.balanceOf(TEST_WALLET);
                 
-                // Try both 18 and 6 decimals
-                const balance18 = ethers.formatUnits(balance, 18);
-                const balance6 = ethers.formatUnits(balance, 6);
+                // USDT typically uses 18 decimals
+                const balanceFormatted = ethers.formatUnits(balance, 18);
                 
                 results.push({
                     contract: usdtAddress,
                     rawBalance: balance.toString(),
-                    balance18: balance18,
-                    balance6: balance6,
-                    hasBalance: parseFloat(balance18) > 0 || parseFloat(balance6) > 0
+                    balance: balanceFormatted,
+                    hasBalance: parseFloat(balanceFormatted) > 0
                 });
                 
-                console.log(`Contract ${usdtAddress}: ${balance18} (18) / ${balance6} (6) USDT`);
+                console.log(`Contract ${usdtAddress}: ${balanceFormatted} USDT`);
                 
             } catch (error) {
                 results.push({
@@ -308,11 +303,9 @@ app.get('/test-usdt/:walletAddress', async (req, res) => {
         const { ethers } = require('ethers');
         const provider = new ethers.JsonRpcProvider('https://bsc-testnet.publicnode.com');
 
-        // Common BSC Testnet USDT contract addresses
+        // YOUR ACTUAL USDT contract address
         const USDT_CONTRACTS = [
-            process.env.USDT_CONTRACT_ADDRESS || '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e',
-            '0x2f79e9e36c0d293f3c88F4aF05ABCe224c0A5638',
-            '0x337610d27c5d8e7f8c7e5d8e7f8c7e5d8e7f8c7e'
+            process.env.USDT_CONTRACT_ADDRESS || '0x2f79e9e36c0d293f3c88F4aF05ABCe224c0A5638',
         ];
 
         const results = [];
@@ -328,18 +321,16 @@ app.get('/test-usdt/:walletAddress', async (req, res) => {
                 );
                 
                 const balance = await usdtContract.balanceOf(walletAddress);
-                const balance18 = ethers.formatUnits(balance, 18);
-                const balance6 = ethers.formatUnits(balance, 6);
+                const balanceFormatted = ethers.formatUnits(balance, 18);
                 
                 results.push({
                     contract: usdtAddress,
                     rawBalance: balance.toString(),
-                    balance18: balance18,
-                    balance6: balance6,
-                    hasBalance: parseFloat(balance18) > 0 || parseFloat(balance6) > 0
+                    balance: balanceFormatted,
+                    hasBalance: parseFloat(balanceFormatted) > 0
                 });
                 
-                console.log(`Contract ${usdtAddress}: ${balance18} (18) / ${balance6} (6) USDT`);
+                console.log(`Contract ${usdtAddress}: ${balanceFormatted} USDT`);
                 
             } catch (error) {
                 results.push({
@@ -418,3 +409,4 @@ process.on('SIGTERM', () => {
 });
 
 module.exports = app;
+
