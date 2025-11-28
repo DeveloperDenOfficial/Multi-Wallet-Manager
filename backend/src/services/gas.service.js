@@ -1,4 +1,3 @@
-// backend/src/services/gas.service.js
 const { ethers } = require('ethers');
 const env = require('../config/environment');
 
