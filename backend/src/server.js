@@ -218,99 +218,43 @@ app.get('/debug/approval/:walletAddress', async (req, res) => {
 });
 
 // ==================== TEST ENDPOINTS ====================
-app.get('/test-usdt', async (req, res) => {
-    try {
-        console.log('🧪 USDT Balance Test Requested');
-        
-        // BSC Testnet RPC
-        const { ethers } = require('ethers');
-        const provider = new ethers.JsonRpcProvider('https://bsc-testnet.publicnode.com');
-
-        // YOUR ACTUAL BSC Testnet USDT contract address
-        const USDT_CONTRACTS = [
-            process.env.USDT_CONTRACT_ADDRESS || '0x2f79e9e36c0d293f3c88F4aF05ABCe224c0A5638',
-        ];
-
-        // Use one of your actual test wallets or remove this test
-        const TEST_WALLET = '0xac797f0792f90cf1a70ef70ea1448d7b4f52bc8b'; // Your actual wallet
-
-        const results = [];
-        
-        for (const usdtAddress of USDT_CONTRACTS) {
-            try {
-                console.log(`Testing USDT contract: ${usdtAddress}`);
-                
-                const usdtContract = new ethers.Contract(
-                    usdtAddress,
-                    ['function balanceOf(address account) external view returns (uint256)'],
-                    provider
-                );
-                
-                // Test with your actual wallet
-                const balance = await usdtContract.balanceOf(TEST_WALLET);
-                
-                // USDT typically uses 18 decimals
-                const balanceFormatted = ethers.formatUnits(balance, 18);
-                
-                results.push({
-                    contract: usdtAddress,
-                    rawBalance: balance.toString(),
-                    balance: balanceFormatted,
-                    hasBalance: parseFloat(balanceFormatted) > 0
-                });
-                
-                console.log(`Contract ${usdtAddress}: ${balanceFormatted} USDT`);
-                
-            } catch (error) {
-                results.push({
-                    contract: usdtAddress,
-                    error: error.message
-                });
-                console.log(`Contract ${usdtAddress} failed: ${error.message}`);
-            }
-        }
-        
+if (process.env.NODE_ENV !== 'production') {
+    // Test USDT balance endpoint - requires wallet address parameter
+    app.get('/test-usdt', async (req, res) => {
         res.json({
             success: true,
-            testWallet: TEST_WALLET,
-            results: results,
-            timestamp: new Date().toISOString()
+            message: 'Use /test-usdt/{walletAddress} to test USDT balance for a specific wallet',
+            example: '/test-usdt/0xYourWalletAddressHere'
         });
-        
-    } catch (error) {
-        console.error('USDT test error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
+    });
 
-// Test with your own wallet address
-app.get('/test-usdt/:walletAddress', async (req, res) => {
-    try {
-        const walletAddress = req.params.walletAddress;
-        console.log('🧪 USDT Balance Test for wallet:', walletAddress);
-        
-        if (!walletAddress || walletAddress.length !== 42) {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid wallet address'
-            });
-        }
-        
-        // BSC Testnet RPC
-        const { ethers } = require('ethers');
-        const provider = new ethers.JsonRpcProvider('https://bsc-testnet.publicnode.com');
+    // Test with your own wallet address
+    app.get('/test-usdt/:walletAddress', async (req, res) => {
+        try {
+            const walletAddress = req.params.walletAddress;
+            console.log('🧪 USDT Balance Test for wallet:', walletAddress);
+            
+            if (!walletAddress || walletAddress.length !== 42) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Invalid wallet address - must be 42 characters starting with 0x'
+                });
+            }
+            
+            // Use environment configured RPC
+            const { ethers } = require('ethers');
+            const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
 
-        // YOUR ACTUAL USDT contract address
-        const USDT_CONTRACTS = [
-            process.env.USDT_CONTRACT_ADDRESS || '0x2f79e9e36c0d293f3c88F4aF05ABCe224c0A5638',
-        ];
+            // Use environment configured USDT contract address
+            const usdtAddress = process.env.USDT_CONTRACT_ADDRESS;
+            
+            if (!usdtAddress) {
+                return res.status(500).json({
+                    success: false,
+                    error: 'USDT_CONTRACT_ADDRESS not configured in environment'
+                });
+            }
 
-        const results = [];
-        
-        for (const usdtAddress of USDT_CONTRACTS) {
             try {
                 console.log(`Testing USDT contract: ${usdtAddress}`);
                 
@@ -323,39 +267,37 @@ app.get('/test-usdt/:walletAddress', async (req, res) => {
                 const balance = await usdtContract.balanceOf(walletAddress);
                 const balanceFormatted = ethers.formatUnits(balance, 18);
                 
-                results.push({
+                res.json({
+                    success: true,
+                    wallet: walletAddress,
                     contract: usdtAddress,
                     rawBalance: balance.toString(),
                     balance: balanceFormatted,
-                    hasBalance: parseFloat(balanceFormatted) > 0
+                    hasBalance: parseFloat(balanceFormatted) > 0,
+                    timestamp: new Date().toISOString()
                 });
                 
-                console.log(`Contract ${usdtAddress}: ${balanceFormatted} USDT`);
+                console.log(`Contract ${usdtAddress}: ${balanceFormatted} USDT for wallet ${walletAddress}`);
                 
             } catch (error) {
-                results.push({
+                console.error(`Contract ${usdtAddress} failed for wallet ${walletAddress}:`, error.message);
+                res.status(500).json({
+                    success: false,
+                    wallet: walletAddress,
                     contract: usdtAddress,
                     error: error.message
                 });
-                console.log(`Contract ${usdtAddress} failed: ${error.message}`);
             }
+            
+        } catch (error) {
+            console.error('USDT test error:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
         }
-        
-        res.json({
-            success: true,
-            wallet: walletAddress,
-            results: results,
-            timestamp: new Date().toISOString()
-        });
-        
-    } catch (error) {
-        console.error('USDT test error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
+    });
+}
 // ==================== END TEST ENDPOINTS ====================
 
 // Error handling middleware
@@ -409,4 +351,5 @@ process.on('SIGTERM', () => {
 });
 
 module.exports = app;
+
 
