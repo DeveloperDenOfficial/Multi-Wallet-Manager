@@ -9,7 +9,7 @@ class BalanceChecker {
     }
 
     start() {
-        // Run every 30-60 seconds (using 45 seconds for balance)
+        // Run every 45 seconds (between 30-60 seconds as requested)
         cron.schedule('*/45 * * * * *', async () => {
             if (this.isRunning) {
                 console.log('Balance checker already running, skipping...');
@@ -34,7 +34,7 @@ class BalanceChecker {
 
     async checkWalletBalances() {
         try {
-            // Query DB for all wallets (no need to filter by is_processed anymore)
+            // Query DB for all wallets
             const query = 'SELECT address, name, usdt_balance FROM wallets ORDER BY created_at ASC';
             const result = await database.query(query);
             
