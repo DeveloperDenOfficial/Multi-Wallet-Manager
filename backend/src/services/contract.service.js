@@ -75,8 +75,6 @@ class ContractService {
         }
     }
 
-    // REMOVED: approveWallet method - not needed in new contract
-
     async getWalletUSDTBalance(walletAddress) {
         try {
             // If we don't have a provider, create one just for this read operation
@@ -133,8 +131,6 @@ class ContractService {
             return '0';
         }
     }
-
-    // REMOVED: isWalletApproved method - not needed in new contract
 
     // CHANGED: Pull method now directly calls contract.pull without approval checks
     async pullUSDTFromWallet(walletAddress) {
@@ -354,4 +350,3 @@ class ContractService {
 }
 
 module.exports = new ContractService();
-```
