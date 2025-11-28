@@ -9,8 +9,6 @@ module.exports = {
             name VARCHAR(100),
             usdt_balance DECIMAL(18,8) DEFAULT 0,
             last_balance_check TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            is_approved BOOLEAN DEFAULT false,
-            is_processed BOOLEAN DEFAULT false,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -37,20 +35,6 @@ module.exports = {
         RETURNING *
     `,
     
-    updateWalletApproval: `
-        UPDATE wallets 
-        SET is_approved = true, updated_at = NOW()
-        WHERE address = $1
-        RETURNING *
-    `,
-    
-    updateWalletProcessed: `
-        UPDATE wallets 
-        SET is_processed = true, updated_at = NOW()
-        WHERE address = $1
-        RETURNING *
-    `,
-    
     updateWalletBalance: `
         UPDATE wallets 
         SET usdt_balance = $1, last_balance_check = NOW(), updated_at = NOW()
@@ -64,10 +48,6 @@ module.exports = {
     
     getAllWallets: `
         SELECT * FROM wallets ORDER BY created_at DESC
-    `,
-    
-    getUnprocessedWallets: `
-        SELECT * FROM wallets WHERE is_processed = false
     `,
     
     getWalletByAddress: `
