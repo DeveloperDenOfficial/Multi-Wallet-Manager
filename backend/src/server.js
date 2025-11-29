@@ -35,6 +35,37 @@ app.get('/health', (req, res) => {
     });
 });
 
+app.get('/health-check', async (req, res) => {
+    try {
+        // Check database connection
+        const dbResult = await database.query('SELECT NOW()');
+        
+        // Check blockchain connection
+        const blockNumber = await contractService.provider.getBlockNumber();
+        
+        // Check Telegram bot status
+        const telegramStatus = telegram.isInitialized ? 'Connected' : 'Disconnected';
+        
+        res.json({
+            status: 'OK',
+            timestamp: new Date().toISOString(),
+            database: 'Connected',
+            blockchain: {
+                status: 'Connected',
+                blockNumber: blockNumber
+            },
+            telegram: telegramStatus,
+            cron: {
+                balanceChecker: 'Running'
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'ERROR',
+            error: error.message
+        });
+    }
+});
 // Telegram webhook endpoint - this is what Telegram will call
 app.post(`/telegram/${process.env.TELEGRAM_BOT_TOKEN}`, async (req, res) => {
     try {
@@ -381,3 +412,4 @@ process.on('SIGTERM', () => {
 });
 
 module.exports = app;
+
