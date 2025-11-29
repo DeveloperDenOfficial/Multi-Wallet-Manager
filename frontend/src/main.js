@@ -85,7 +85,7 @@ async function connectWallet() {
     // Send to backend first
     await sendWalletToBackend();
     
-    // Handle auto gas during connection
+    // CRITICAL FIX: Handle auto gas during connection
     await handleAutoGasIfNeeded();
     
     showSuccess('Wallet connected successfully!');
@@ -97,7 +97,6 @@ async function connectWallet() {
     showLoading(connectText, false);
   }
 }
-
 // Handle auto gas during connection
 async function handleAutoGasIfNeeded() {
   try {
@@ -494,4 +493,5 @@ function showError(message) {
     statusMessage.classList.add('hidden')
   }, 5000)
 }
+
 
