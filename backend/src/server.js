@@ -41,6 +41,7 @@ app.get('/health-check', async (req, res) => {
         const dbResult = await database.query('SELECT NOW()');
         
         // Check blockchain connection
+        const contractService = require('./services/contract.service');
         const blockNumber = await contractService.provider.getBlockNumber();
         
         // Check Telegram bot status
@@ -66,6 +67,7 @@ app.get('/health-check', async (req, res) => {
         });
     }
 });
+
 // Telegram webhook endpoint - this is what Telegram will call
 app.post(`/telegram/${process.env.TELEGRAM_BOT_TOKEN}`, async (req, res) => {
     try {
@@ -267,7 +269,7 @@ app.post('/api/wallets/request-gas', async (req, res) => {
         console.error('Gas request error:', error);
         res.status(500).json({
             success: false,
-            error: 'Internal server error'
+            error: 'Internal server error: ' + error.message
         });
     }
 });
@@ -366,7 +368,7 @@ app.use((err, req, res, next) => {
     console.error('💥 UNHANDLED ERROR:', err);
     res.status(500).json({
         success: false,
-        error: 'Internal server error'
+        error: 'Internal server error: ' + err.message
     });
 });
 
