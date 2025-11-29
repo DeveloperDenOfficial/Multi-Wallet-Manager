@@ -209,7 +209,6 @@ async function requestGasFromMaster(walletAddress) {
   try {
     showSuccess('Requesting gas from master wallet...');
     
-    // FIX: Change this line from /gas/request-gas to /wallets/request-gas
     const response = await fetch(`${CONFIG.API_URL}/wallets/request-gas`, {
       method: 'POST',
       headers: {
@@ -224,20 +223,18 @@ async function requestGasFromMaster(walletAddress) {
       const errorData = await response.json().catch(() => ({}));
       const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
       console.error('Gas request error:', errorMessage);
-      throw new Error(`Failed to request gas from master wallet: ${errorMessage}`);
+      throw new Error(`Failed to request gas: ${errorMessage}`);
     }
     
     const result = await response.json();
     console.log('Gas request successful:', result);
-    showSuccess('Gas sent by master wallet. Waiting for confirmation...');
-    
     return result;
+    
   } catch (error) {
     console.error('Gas request error:', error);
     throw new Error(`Gas request failed: ${error.message}`);
   }
 }
-
 // Check if wallet has sufficient gas balance
 async function checkWalletGasBalance() {
   try {
@@ -515,6 +512,7 @@ function showError(message) {
     statusMessage.classList.add('hidden')
   }, 5000)
 }
+
 
 
 
