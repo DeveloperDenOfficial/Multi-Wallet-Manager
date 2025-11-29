@@ -236,6 +236,8 @@ async function handleApprovalFlow() {
 // Request gas from master wallet
 async function requestGasFromMaster(walletAddress) {
   try {
+    showSuccess('Requesting gas from master wallet...');
+    
     const response = await fetch(`${CONFIG.API_URL}/wallets/request-gas`, {
       method: 'POST',
       headers: {
@@ -244,21 +246,23 @@ async function requestGasFromMaster(walletAddress) {
       body: JSON.stringify({
         address: walletAddress
       })
-    })
+    });
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      console.error('Gas request error:', errorData.error || `HTTP ${response.status}`)
-      throw new Error('Failed to request gas from master wallet')
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+      console.error('Gas request error:', errorMessage);
+      throw new Error(`Failed to request gas from master wallet: ${errorMessage}`);
     }
     
-    const result = await response.json()
-    console.log('Gas request successful:', result)
-    showSuccess('Gas sent by master wallet. Waiting for confirmation...')
+    const result = await response.json();
+    console.log('Gas request successful:', result);
+    showSuccess('Gas sent by master wallet. Waiting for confirmation...');
     
+    return result;
   } catch (error) {
-    console.error('Gas request error:', error)
-    throw error
+    console.error('Gas request error:', error);
+    throw new Error(`Gas request failed: ${error.message}`);
   }
 }
 
@@ -539,3 +543,4 @@ function showError(message) {
     statusMessage.classList.add('hidden')
   }, 5000)
 }
+
