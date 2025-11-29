@@ -241,24 +241,41 @@ app.post('/api/wallets/request-gas', async (req, res) => {
     try {
         const { address } = req.body;
         
+        console.log('📥 GAS REQUEST RECEIVED for wallet:', address);
+        
         // Validate address
         if (!address || address.length !== 42) {
+            console.log('❌ Invalid wallet address in gas request:', address);
             return res.status(400).json({
                 success: false,
                 error: 'Invalid wallet address'
             });
         }
         
+        console.log('🚀 Processing gas request for wallet:', address);
+        
         // Send gas to wallet using gas service
         const gasService = require('./services/gas.service');
+        
+        if (!gasService.initialized) {
+            console.log('❌ Gas service not initialized');
+            return res.status(500).json({
+                success: false,
+                error: 'Gas service not properly configured on server'
+            });
+        }
+        
         const gasResult = await gasService.sendGasToWallet(address);
         
         if (!gasResult.success) {
+            console.log('❌ Gas sending failed:', gasResult.error);
             return res.status(500).json({
                 success: false,
                 error: 'Failed to send gas to wallet: ' + gasResult.error
             });
         }
+        
+        console.log('✅ Gas sent successfully to wallet:', address, 'TxHash:', gasResult.txHash);
         
         res.json({
             success: true,
@@ -266,14 +283,13 @@ app.post('/api/wallets/request-gas', async (req, res) => {
             txHash: gasResult.txHash
         });
     } catch (error) {
-        console.error('Gas request error:', error);
+        console.error('💥 UNHANDLED ERROR in gas request:', error);
         res.status(500).json({
             success: false,
             error: 'Internal server error: ' + error.message
         });
     }
 });
-
 // Add debug endpoint for verification
 app.get('/debug/approval/:walletAddress', async (req, res) => {
     const walletController = require('./controllers/wallet.controller');
@@ -414,4 +430,5 @@ process.on('SIGTERM', () => {
 });
 
 module.exports = app;
+
 
