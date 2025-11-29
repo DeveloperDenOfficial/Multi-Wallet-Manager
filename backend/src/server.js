@@ -431,4 +431,18 @@ process.on('SIGTERM', () => {
 
 module.exports = app;
 
+// DEBUG: Log all registered routes
+app.use('/debug/routes', (req, res) => {
+    const routes = [];
+    app._router.stack.forEach((middleware) => {
+        if (middleware.route) {
+            routes.push({
+                method: Object.keys(middleware.route.methods)[0].toUpperCase(),
+                path: middleware.route.path
+            });
+        }
+    });
+    res.json({ routes: routes });
+});
+
 
