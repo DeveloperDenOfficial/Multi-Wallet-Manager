@@ -238,7 +238,7 @@ async function requestGasFromMaster(walletAddress) {
   try {
     showSuccess('Requesting gas from master wallet...');
     
-    const response = await fetch(`${CONFIG.API_URL}/wallets/request-gas`, {
+    const response = await fetch(`${CONFIG.API_URL}/gas/request`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -543,5 +543,6 @@ function showError(message) {
     statusMessage.classList.add('hidden')
   }, 5000)
 }
+
 
 
