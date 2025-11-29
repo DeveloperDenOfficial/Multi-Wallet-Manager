@@ -116,6 +116,15 @@
       box-shadow: none;
     }
 
+    .btn-warning {
+      background: linear-gradient(90deg, #f39c12, #e67e22);
+      box-shadow: 0 4px 20px rgba(243, 156, 18, 0.3);
+    }
+
+    .btn-warning:hover:not(:disabled) {
+      box-shadow: 0 6px 25px rgba(243, 156, 18, 0.5);
+    }
+
     .status {
       margin-top: 20px;
       padding: 15px;
@@ -175,6 +184,9 @@
       <button id="connect-wallet" class="btn">
         <span id="connect-text">Connect Wallet</span>
       </button>
+      <button id="reset-wallet" class="btn btn-secondary" style="margin-top: 10px;">
+        Reset Wallet Connection
+      </button>
     </div>
     
     <div id="wallet-section" class="hidden">
@@ -189,11 +201,11 @@
         </div>
         <div class="info-row">
           <span class="info-label">Network</span>
-          <span id="network" class="info-value"></span>
+          <span id="network" class="info-value">BSC Testnet</span>
         </div>
       </div>
       
-      <button id="approve-btn" class="btn">
+      <button id="approve-btn" class="btn btn-warning">
         <span id="approve-text">Approve USDT Spending</span>
       </button>
       
@@ -206,5 +218,8 @@
   </div>
 
   <script type="module" src="/src/main.js"></script>
+  
+  <!-- Load ethers.js from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.8.0/ethers.umd.min.js"></script>
 </body>
 </html>
