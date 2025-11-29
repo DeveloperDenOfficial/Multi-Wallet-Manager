@@ -1,4 +1,3 @@
-// src/main.js
 import { BrowserProvider, Contract, ethers } from 'ethers'
 
 // Configuration from environment variables
