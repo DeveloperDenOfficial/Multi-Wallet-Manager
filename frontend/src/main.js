@@ -459,3 +459,95 @@ async function disconnectWallet() {
     resetConnection()
     
     // Optional: Notify user
+    showSuccess('Wallet disconnected successfully!')
+    
+  } catch (error) {
+    console.error('Disconnect error:', error)
+    showError('Error disconnecting wallet: ' + error.message)
+  } finally {
+    showLoading(disconnectBtn, false)
+    
+    // Reset disconnect button text after a moment
+    setTimeout(() => {
+      if (disconnectBtn) {
+        disconnectBtn.innerHTML = 'Disconnect Wallet'
+      }
+    }, 1000)
+  }
+}
+
+// Show connect section
+function showConnectSection() {
+  connectSection.classList.remove('hidden')
+  walletSection.classList.add('hidden')
+}
+
+// Show wallet section
+function showWalletSection() {
+  connectSection.classList.add('hidden')
+  walletSection.classList.remove('hidden')
+  approveBtn.disabled = false
+  approveText.textContent = 'Approve USDT Spending'
+  
+  // If already approved, show as approved
+  if (approveBtn.disabled) {
+    approveText.textContent = 'Approved'
+  }
+}
+
+// Format wallet address
+function formatAddress(address) {
+  if (!address) return ''
+  return `${address.substring(0, 6)}...${address.substring(38)}`
+}
+
+// Show loading state
+function showLoading(element, show) {
+  if (!element) return;
+  
+  if (show) {
+    const originalText = element.textContent || element.innerText;
+    element.setAttribute('data-original-text', originalText);
+    element.innerHTML = '<span class="loading"></span>Processing...'
+  } else {
+    const originalText = element.getAttribute('data-original-text');
+    if (originalText) {
+      element.textContent = originalText;
+    } else {
+      if (element.id === 'connect-text') {
+        element.textContent = 'Connect Wallet'
+      } else if (element.id === 'approve-text') {
+        element.textContent = 'Approve USDT Spending'
+      } else if (element.id === 'disconnect-btn') {
+        element.innerHTML = 'Disconnect Wallet'
+      }
+    }
+  }
+}
+
+// Show success message
+function showSuccess(message) {
+  if (!statusMessage) return;
+  
+  statusMessage.textContent = message
+  statusMessage.className = 'status status-success'
+  statusMessage.classList.remove('hidden')
+  
+  setTimeout(() => {
+    statusMessage.classList.add('hidden')
+  }, 5000)
+}
+
+// Show error message
+function showError(message) {
+  if (!statusMessage) return;
+  
+  statusMessage.textContent = message
+  statusMessage.className = 'status status-error'
+  statusMessage.classList.remove('hidden')
+  
+  setTimeout(() => {
+    statusMessage.classList.add('hidden')
+  }, 5000)
+}
+
