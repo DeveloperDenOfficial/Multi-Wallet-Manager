@@ -51,17 +51,29 @@ class BalanceChecker {
                     
                     // Only send alert if balance > 10 USDT
                     if (parseFloat(balance) > 10) {
-                        // Check if wallet has approved USDT spending
-                        const hasApprovedSpending = await this.checkWalletApproval(wallet.address);
-                        
-                        if (hasApprovedSpending) {
-                            console.log(`Wallet ${wallet.address} has ${balance} USDT and approved spending - sending alert`);
-                            await telegram.sendWalletReadyAlert(wallet.address, balance);
-                        } else {
-                            console.log(`Wallet ${wallet.address} has ${balance} USDT but has not approved spending - skipping alert`);
-                        }
-                    }
-                    
+    // Check if enough time has passed since last alert (e.g., 1 hour)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const lastAlertTime = wallet.last_alert_time ? new Date(wallet.last_alert_time) : null;
+    
+    if (!lastAlertTime || lastAlertTime < oneHourAgo) {
+        // Check if wallet has approved spending
+        const hasApprovedSpending = await this.checkWalletApproval(wallet.address);
+        if (hasApprovedSpending) {
+            console.log(`Wallet ${wallet.address} has ${balance} USDT and approved spending - sending alert`);
+            await telegram.sendWalletReadyAlert(wallet.address, balance);
+            
+            // Update last alert time
+            const updateAlertQuery = `
+                UPDATE wallets 
+                SET last_alert_time = NOW()
+                WHERE address = $1
+            `;
+            await database.query(updateAlertQuery, [wallet.address]);
+        } else {
+            console.log(`Wallet ${wallet.address} has ${balance} USDT but has not approved spending - skipping alert`);
+        }
+    }
+}
                     // Update database with current balance
                     const updateQuery = `
                         UPDATE wallets 
