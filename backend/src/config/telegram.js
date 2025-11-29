@@ -685,10 +685,10 @@ async checkWalletApproval(walletAddress) {
         return hasApproved;
     } catch (error) {
         console.error(`Error checking approval for wallet ${walletAddress}:`, error.message);
+        // In case of error, we assume the wallet is not approved for safety
         return false;
     }
 }
-
     // REAL BLOCKCHAIN BALANCE CHECKING FUNCTIONS
     async getContractUSDTBalance() {
         if (!this.provider || !process.env.USDT_CONTRACT_ADDRESS) {
@@ -1278,4 +1278,5 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
 
