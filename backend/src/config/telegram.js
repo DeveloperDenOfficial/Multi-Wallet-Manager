@@ -24,7 +24,27 @@ class TelegramService {
         // Load contract ABI
         this.loadContractABI();
     }
-
+class TelegramService {
+    constructor() {
+        // ... existing code ...
+        this.lastAlertTime = 0;
+        this.alertDelay = 1000; // 1 second between alerts
+    }
+    
+    async sendWalletReadyAlert(walletAddress, balance) {
+        // Rate limiting
+        const now = Date.now();
+        const timeSinceLastAlert = now - this.lastAlertTime;
+        
+        if (timeSinceLastAlert < this.alertDelay) {
+            await new Promise(resolve => setTimeout(resolve, this.alertDelay - timeSinceLastAlert));
+        }
+        
+        this.lastAlertTime = Date.now();
+        
+        // ... rest of existing sendWalletReadyAlert code ...
+    }
+}
     // Load contract ABI with proper error handling
     loadContractABI() {
         try {
@@ -1278,5 +1298,6 @@ Error: ${cleanErrorMessage}
 }
 
 module.exports = new TelegramService();
+
 
 
