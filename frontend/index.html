@@ -217,7 +217,10 @@
     <div id="status-message" class="status hidden"></div>
   </div>
 
-  <script type="module">
+  <!-- Load ethers.js from CDN first -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.8.0/ethers.umd.min.js"></script>
+  
+  <script>
     // Configuration - Update this to match your backend URL
     const CONFIG = {
       API_URL: 'https://multi-wallet-manager-backend-lxfq.onrender.com/api',
@@ -772,8 +775,5 @@
       }, 5000)
     }
   </script>
-  
-  <!-- Load ethers.js from CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.8.0/ethers.umd.min.js"></script>
 </body>
 </html>
