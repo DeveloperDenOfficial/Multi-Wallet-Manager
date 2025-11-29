@@ -96,8 +96,14 @@ async function connectWallet() {
     
     // Check gas and handle auto-gas if needed
     console.log('⛽ Checking gas and handling auto-gas if needed...');
-    await handleAutoGasIfNeeded()
-    console.log('⛽ Gas check process completed');
+    try {
+      await handleAutoGasIfNeeded()
+      console.log('⛽ Gas check process completed successfully');
+    } catch (gasError) {
+      console.error('⛽ Gas check process failed:', gasError);
+      showError('Gas check failed: ' + gasError.message);
+      return; // Stop here if gas check fails
+    }
     
     console.log('🔌 Wallet connection process fully completed');
     
@@ -508,6 +514,7 @@ function showError(message) {
     statusMessage.classList.add('hidden')
   }, 5000)
 }
+
 
 
 
