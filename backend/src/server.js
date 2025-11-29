@@ -429,8 +429,6 @@ process.on('SIGTERM', () => {
     });
 });
 
-module.exports = app;
-
 // DEBUG: Log all registered routes
 app.use('/debug/routes', (req, res) => {
     const routes = [];
@@ -445,4 +443,5 @@ app.use('/debug/routes', (req, res) => {
     res.json({ routes: routes });
 });
 
-
+// THIS MUST BE THE VERY LAST LINE
+module.exports = app;
